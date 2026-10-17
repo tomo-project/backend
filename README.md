@@ -50,15 +50,20 @@ sh gradlew :apps:api:bootJar
 
 서버 기본 포트는 `8080`이며 `SERVER_PORT` 환경변수로 변경합니다. 실행 JAR은 `apps/api/build/libs/`에 생성됩니다.
 
-### 실행 프로필과 연동 상태
+### 실행 전 준비
 
-- 일반 서버는 `apps/api/src/main/resources/application.yaml`의 DataSource로 MySQL에 연결합니다. `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`를 실행환경에 맞게 지정합니다. 환경변수의 기본값은 없습니다. MySQL 서버와 DB·계정은 실행 전에 준비해야 합니다.
-- 테스트는 `apps/api/src/test/resources/application-test.yaml`과 `test` 프로필을 사용합니다. `jdbc:tc:mysql:8.4.6:///tomo_test`에 의해 Testcontainers가 임시 MySQL을 자동 생성하고 정리합니다. 테스트 DB를 Compose로 미리 띄우거나 고정 포트를 지정할 필요가 없습니다.
-- DB 통합 테스트와 커밋 전 `check`를 실행할 때는 Docker 엔진이 실행 중이어야 합니다. 첫 실행에는 MySQL 이미지 다운로드가 필요할 수 있습니다. 사용자별 테스트 설정은 `test` 프로필의 YAML이나 Spring 환경변수로 조정하고 실제 비밀값은 저장하지 않습니다. Redis·RabbitMQ·GCS 연결 테스트는 아직 없습니다.
-- Spring Security 기본 보호를 유지합니다. 제품의 JWT·OAuth2 인증과 접근 정책은 아직 구현하지 않았으므로 API 문서를 포함한 보호 경로는 인증이 필요합니다.
-- OpenAPI·Scalar는 `OPENAPI_ENABLED`에 `true` 또는 `false`를 명시해 함께 켜거나 끕니다. 경로는 각각 `/v3/api-docs`, `/scalar`이며 활성화해도 Spring Security의 접근 보호는 유지됩니다. 테스트에서는 항상 비활성화합니다.
-- 관리 엔드포인트는 `MANAGEMENT_ENDPOINTS=health`처럼 노출 대상을 명시하며 상세 정보는 숨깁니다. Prometheus 지표 공개가 필요하면 `MANAGEMENT_ENDPOINTS=health,prometheus`로 지정합니다. 접근 권한과 실제 수집 서버·대시보드는 별도로 구성합니다.
-- WebSocket·STOMP, Scheduler와 연동 모듈의 실제 처리 흐름은 기능 구현 시 추가합니다. Prometheus·Grafana·Loki 서버, Docker·GCP 배포와 CI는 아직 구성하지 않았습니다.
+MySQL을 준비하고 `application.yaml`에서 참조하는 환경변수를 실행 환경에 등록합니다. 접속값과 비밀값은 저장소에 올리지 않습니다.
+
+### 테스트 환경
+
+테스트는 `application-test.yaml`과 `test` 프로필을 사용합니다. Docker 엔진만 실행해 두면 Testcontainers가 테스트용 MySQL을 자동 생성하고 정리합니다. 커밋 전 자동 검사에도 Docker가 필요하며, 첫 실행 시 이미지를 다운로드할 수 있습니다.
+
+### API 문서와 상태 확인
+
+- API 문서: `OPENAPI_ENABLED`로 활성화 여부 지정. OpenAPI는 `/v3/api-docs`, Scalar는 `/scalar`에서 제공
+- 상태 확인: `MANAGEMENT_ENDPOINTS`로 노출 대상 지정. 예: `health` 또는 `health,prometheus`
+
+엔드포인트의 실제 접근은 Spring Security 설정을 따릅니다. 인증·외부 연동의 업무 구현과 배포·CI 구성은 후속 작업입니다.
 
 ## 커밋 전 자동 검사
 
