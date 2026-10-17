@@ -60,21 +60,6 @@ sh gradlew :apps:api:bootJar
 - 관리 엔드포인트는 `MANAGEMENT_ENDPOINTS=health`처럼 노출 대상을 명시하며 상세 정보는 숨깁니다. Prometheus 지표 공개가 필요하면 `MANAGEMENT_ENDPOINTS=health,prometheus`로 지정합니다. 접근 권한과 실제 수집 서버·대시보드는 별도로 구성합니다.
 - WebSocket·STOMP, Scheduler와 연동 모듈의 실제 처리 흐름은 기능 구현 시 추가합니다. Prometheus·Grafana·Loki 서버, Docker·GCP 배포와 CI는 아직 구성하지 않았습니다.
 
-### Redis·RabbitMQ 접속 설정
-
-| 환경변수 | 로컬 설정 예시 (기본값 없음) |
-| --- | --- |
-| `REDIS_HOST`, `REDIS_PORT` | `localhost`, `6379` |
-| `REDIS_USERNAME`, `REDIS_PASSWORD` | 빈 값 |
-| `REDIS_DATABASE` | `0` |
-| `RABBITMQ_HOST`, `RABBITMQ_PORT` | `localhost`, `5672` |
-| `RABBITMQ_USERNAME`, `RABBITMQ_PASSWORD` | `guest`, `guest` (로컬 개발용) |
-| `RABBITMQ_VIRTUAL_HOST` | `/` |
-
-Redis 접속·명령 타임아웃은 각각 3초, RabbitMQ 접속 타임아웃은 5초입니다. 위 Redis 설정은 Spring Data Redis 연결에 적용되며 Redisson 클라이언트 생성은 아직 구현 전입니다. 캐시 TTL, 분산 락 정책, RabbitMQ 큐·라우팅·재시도 정책은 관련 기능 구현 시 정합니다.
-
-Flyway는 `classpath:db/migration`을 사용하고 실행 전 마이그레이션 이력을 검증하며 `clean`을 비활성화합니다. 현재 마이그레이션 파일은 없고, JPA의 자동 스키마 변경도 `ddl-auto: none`으로 막아둔 상태입니다.
-
 ## 커밋 전 자동 검사
 
 클론한 저장소마다 JDK 21 환경에서 한 번 실행해 Git 훅을 활성화합니다.
