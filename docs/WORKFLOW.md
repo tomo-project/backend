@@ -37,7 +37,7 @@ Fork Repository main 최신화
 원본 Repository:
 
 ```text
-today-it/backend
+tomo-project/backend
 ```
 
 원본 Repository를 자신의 계정으로 Fork한 후 Fork Repository를 Clone합니다.
@@ -66,7 +66,7 @@ git remote -v
 `upstream`이 없다면 한 번만 추가합니다.
 
 ```bash
-git remote add upstream https://github.com/today-it/backend.git
+git remote add upstream https://github.com/tomo-project/backend.git
 ```
 
 다시 확인합니다.
@@ -79,7 +79,7 @@ git remote -v
 
 ```text
 origin    → 개인 Fork Repository
-upstream  → today-it/backend
+upstream  → tomo-project/backend
 ```
 
 `upstream` 등록은 최초 한 번만 하면 됩니다.
@@ -164,7 +164,7 @@ origin
 feature/12-profile-update
 ```
 
-원본 Repository인 `today-it/backend`에는 작업 브랜치를 직접 Push하지 않습니다.
+원본 Repository인 `tomo-project/backend`에는 작업 브랜치를 직접 Push하지 않습니다.
 
 ## 8. Pull Request 생성
 
@@ -178,13 +178,13 @@ feature/12-profile-update
         ↓
 Pull Request
         ↓
-today-it/backend
+tomo-project/backend
 main
 ```
 
 Pull Request 생성 시 다음 내용을 확인합니다.
 
-* Base Repository: `today-it/backend`
+* Base Repository: `tomo-project/backend`
 * Base Branch: `main`
 * Head Repository: 자신의 Fork Repository
 * Compare Branch: 자신의 작업 브랜치
@@ -259,7 +259,7 @@ git remote -v
 `upstream`이 없다면 한 번만 등록합니다.
 
 ```bash
-git remote add upstream https://github.com/today-it/backend.git
+git remote add upstream https://github.com/tomo-project/backend.git
 ```
 
 이후 PR Merge 후에는 동일하게 다음 명령어를 사용합니다.

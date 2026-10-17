@@ -1,0 +1,39 @@
+spring:
+  datasource:
+    url: jdbc:tc:mysql:8.4.6:///tomo_test
+    username: test
+    password: test
+  jpa:
+    hibernate:
+      ddl-auto: none
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      username: ""
+      password: ""
+      database: 0
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+springdoc:
+  api-docs:
+    enabled: false
+
+scalar:
+  enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  health:
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false

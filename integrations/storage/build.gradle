@@ -1,0 +1,9 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'TOMO 파일 저장 연동 모듈'
+
+dependencies {
+    implementation 'com.google.cloud:google-cloud-storage:2.75.0'
+}

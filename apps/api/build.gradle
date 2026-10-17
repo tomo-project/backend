@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot'
+}
+
+description = 'TOMO HTTP API 서버 실행 모듈'
+
+dependencies {
+    // 외부 시스템 연동 모듈
+    implementation project(':integrations:storage')
+    implementation project(':integrations:redis')
+    implementation project(':integrations:messaging')
+
+    // 웹 API와 입력 검증
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // 인증·인가와 JWT
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
+
+    // 데이터 저장과 스키마 변경
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+    runtimeOnly 'org.flywaydb:flyway-mysql'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // 실시간 통신과 API 문서
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-scalar:2.9.1'
+
+    // 상태 점검과 지표 수집
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+    // 테스트와 아키텍처 검증
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:mysql'
+    testImplementation 'com.tngtech.archunit:archunit:1.5.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}

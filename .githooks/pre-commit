@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+hook_java_home=$(git config --local --get tomo.hookJavaHome || true)
+if [ -n "$hook_java_home" ]; then
+    JAVA_HOME="$hook_java_home"
+    export JAVA_HOME
+fi
+
+printf '%s\n' '[pre-commit] Running tests, Spotless, SpotBugs, Checkstyle and ArchUnit...'
+
+if sh ./gradlew check --console=plain; then
+    printf '%s\n' '[pre-commit] All checks passed.'
+else
+    printf '%s\n' '[pre-commit] Commit blocked. Fix the failed checks and try again.' >&2
+    exit 1
+fi

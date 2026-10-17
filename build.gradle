@@ -1,0 +1,82 @@
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+import com.github.spotbugs.snom.SpotBugsTask
+
+plugins {
+    id 'base'
+    id 'org.springframework.boot' version '3.5.16' apply false
+    id 'com.diffplug.spotless' version '8.10.2' apply false
+    id 'com.github.spotbugs' version '6.5.13' apply false
+}
+
+allprojects {
+    group = 'com.tomo'
+    version = '0.0.1-SNAPSHOT'
+
+    repositories {
+        mavenCentral()
+    }
+}
+
+tasks.register('configureGitHookJava', Exec) {
+    description = 'TOMO 커밋 검사에 사용할 Gradle JVM 경로 저장'
+    workingDir rootDir
+    commandLine 'git', 'config', '--local', 'tomo.hookJavaHome', System.getProperty('java.home')
+}
+
+tasks.register('installGitHooks', Exec) {
+    dependsOn tasks.named('configureGitHookJava')
+    group = 'build setup'
+    description = 'TOMO 저장소의 커밋 전 자동 검사 훅 활성화'
+    workingDir rootDir
+    commandLine 'git', 'config', '--local', 'core.hooksPath', '.githooks'
+    doFirst {
+        if (!System.getProperty('os.name').toLowerCase().contains('windows')) {
+            if (!file('.githooks/pre-commit').setExecutable(true, false)) {
+                throw new GradleException('Could not make pre-commit hook executable')
+            }
+        }
+    }
+}
+
+subprojects {
+
+    pluginManager.withPlugin('java') {
+        def javaProject = project
+        dependencies {
+            implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+        }
+        apply from: rootProject.file('gradle/quality.gradle')
+        spotbugs {
+            toolVersion = '4.10.5'
+            ignoreFailures = false
+            effort = Effort.valueOf('MAX')
+            reportLevel = Confidence.valueOf('MEDIUM')
+        }
+        tasks.withType(SpotBugsTask).configureEach {
+            reports {
+                html.required = true
+                xml.required = true
+            }
+        }
+        rootProject.tasks.named('check') {
+            dependsOn javaProject.tasks.named('check')
+        }
+        rootProject.tasks.named('assemble') {
+            dependsOn javaProject.tasks.named('assemble')
+        }
+        java {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(21)
+            }
+        }
+
+        tasks.withType(JavaCompile).configureEach {
+            options.encoding = 'UTF-8'
+        }
+
+        tasks.withType(Test).configureEach {
+            useJUnitPlatform()
+        }
+    }
+}

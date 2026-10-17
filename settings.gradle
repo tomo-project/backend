@@ -1,0 +1,6 @@
+rootProject.name = 'tomo-backend'
+
+include 'apps:api'
+include 'integrations:storage'
+include 'integrations:redis'
+include 'integrations:messaging'

@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+.gradle-user-home/
+**/build/
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

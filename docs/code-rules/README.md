@@ -49,7 +49,7 @@
 | `integrations` | GCS, Redis·Redisson, RabbitMQ 등 외부 시스템 연동 코드 |
 | `infra` | Docker, GCP, 모니터링 등 배포·운영 설정과 스크립트. Gradle 모듈이 아님 |
 
-초기에는 `apps:api`에 기능별 업무 코드를 모읍니다. `apps`, `integrations`는 분류용 디렉터리이며, 그 아래 실행 앱과 연동 라이브러리가 실제 Gradle 모듈입니다. 연동 모듈은 해당 기술을 도입할 때 생성합니다.
+초기에는 `apps:api`에 기능별 업무 코드를 모읍니다. `apps`, `integrations`는 분류용 디렉터리이며, 그 아래 실행 앱과 연동 라이브러리가 실제 Gradle 모듈입니다. `integrations:storage`, `integrations:redis`, `integrations:messaging`에는 모듈 경계와 SDK 의존성을 구성했으며, 실제 연결 설정과 구현은 기능 도입 시 추가합니다.
 
 ```text
 backend/
@@ -58,7 +58,7 @@ backend/
 ├─ integrations/
 │  ├─ storage/             # GCS 연동
 │  ├─ redis/               # Redis·Redisson 연동
-│  └─ messaging/           # RabbitMQ 도입 시 추가
+│  └─ messaging/           # RabbitMQ 연동 모듈, 구현은 도입 시 추가
 ├─ infra/
 │  ├─ docker/              # Dockerfile·Compose
 │  ├─ monitoring/          # Prometheus·Grafana·Loki 설정
@@ -69,7 +69,7 @@ backend/
 
 - Security·OAuth2 로그인 구성, WebSocket·STOMP 진입점과 권한 처리는 `apps:api`에 둡니다.
 - 캐시 키·TTL, 분산 락의 적용 범위, 메시지 발행 시점 등 업무별 정책은 실행 앱의 관련 기능에서 결정합니다. `integrations`는 연결·직렬화·외부 호출 등 기술 연동을 담당합니다.
-- Spring 기본 `application.yml`, DB 연결 설정과 Flyway 마이그레이션은 실행 앱에서 관리합니다. 배포 환경별 값은 실행 시 주입하며, `infra`에는 배포 설정과 환경변수 예시를 두고 실제 비밀값을 저장하지 않습니다.
+- Spring 기본 `application.yaml`, DB 연결 설정과 Flyway 마이그레이션은 실행 앱에서 관리합니다. 배포 환경별 값은 실행 시 주입하며, `infra`에는 배포 설정과 환경변수 예시를 두고 실제 비밀값을 저장하지 않습니다.
 - 단순 예약 작업은 `apps:api`의 관련 기능에서 Spring Scheduler로 실행합니다. 독립적인 실행·배포가 필요해지면 `apps:batch`를 추가합니다.
 - API와 배치가 공유할 업무 모델·정책·저장 계약이 생기면 필요한 부분만 `domains` 모듈로 추출합니다. 이때 JPA 매핑과 저장 구현의 소유 위치도 함께 정하며, 공유가 필요해지기 전에는 `domains`를 만들지 않습니다.
 
@@ -106,7 +106,7 @@ backend/
 - `client`: 외부 API, 메시징과 외부 시스템 연계
 - `common`: 실제로 여러 Aggregate가 공유하는 기술 요소
 
-`todo`, `focus`, `retrospective`, `room`도 `member`처럼 기능 안에서 책임별로 나눕니다. 기본 패키지명은 별도로 결정합니다. `client`에는 연동 모듈과 업무 흐름을 연결하는 코드가 필요한 경우에만 두고, 외부 SDK 호출 구현은 `integrations`에 둡니다.
+`todo`, `focus`, `retrospective`, `room`도 `member`처럼 기능 안에서 책임별로 나눕니다. 기본 패키지명은 `com.tomo`입니다. `client`에는 연동 모듈과 업무 흐름을 연결하는 코드가 필요한 경우에만 두고, 외부 SDK 호출 구현은 `integrations`에 둡니다.
 
 Controller·Service·Repository를 전역 패키지에 모으지 않습니다.
 
@@ -143,6 +143,9 @@ Controller·Service·Repository를 전역 패키지에 모으지 않습니다.
 - 각 Aggregate는 자신의 Repository만 사용합니다.
 - 다른 Aggregate의 Entity·Repository·HTTP DTO를 직접 참조하지 않습니다.
 - 다른 Aggregate의 정보는 해당 `QueryService`를 통해 조회합니다.
+- 다른 도메인의 서비스를 호출할 때는 해당 도메인이 공개한 서비스 인터페이스에 의존합니다. 구현 클래스를 직접 주입하거나 참조하지 않습니다.
+- 공개 인터페이스는 기능을 제공하는 도메인의 `service` 패키지에 두고, 제공 도메인의 Service가 구현합니다. 인터페이스에는 호출 측에 필요한 기능만 공개하며 용도를 드러내는 이름을 사용합니다. 예: `TodoFocusQueryService`.
+- 도메인 간 호출의 입력은 Command 또는 필요한 값으로, 결과는 불변 Model로 전달합니다. 인터페이스에 Entity·Repository·HTTP DTO를 노출하지 않습니다.
 - 조회 결과는 필요한 값만 담은 불변 모델로 전달합니다.
 - Entity에는 다른 Aggregate 객체 대신 식별자를 보관합니다.
 
@@ -152,14 +155,16 @@ Controller·Service·Repository를 전역 패키지에 모으지 않습니다.
 
 Facade는 각 Service를 호출하며, Repository를 직접 사용하지 않습니다.
 
-아래는 To-do에 연결된 집중 세션을 시작한다고 가정한 구조 예시입니다. 집중 기능의 Facade가 회원과 To-do를 확인한 뒤 집중 세션 생성을 요청합니다. 실제 필수 입력, 접근 권한과 세션 시작 조건은 명세 원본 규칙에 따라 확정된 TOMO 명세를 따릅니다.
+아래는 To-do에 연결된 집중 세션을 시작한다고 가정한 구조 예시입니다. 집중 기능의 Facade가 회원과 To-do를 확인한 뒤 집중 세션 생성을 요청합니다. 다른 도메인인 회원·To-do는 공개 조회 인터페이스를 통해 접근하고, 같은 집중 도메인의 `FocusCommandService`는 구체 클래스로 호출합니다. 실제 필수 입력, 접근 권한과 세션 시작 조건은 명세 원본 규칙에 따라 확정된 TOMO 명세를 따릅니다.
 
 ```mermaid
 flowchart TD
-    F[FocusFacade] -->|1. 회원 확인| M[MemberQueryService]
-    F -->|2. To-do 조회| T[TodoQueryService]
+    F[FocusFacade] -->|1. 회원 확인| M[MemberFocusQueryService 인터페이스]
+    F -->|2. To-do 조회| T[TodoFocusQueryService 인터페이스]
     F -->|3. 집중 세션 생성| C[FocusCommandService]
 ```
+
+예시에서 `MemberQueryService`는 `MemberFocusQueryService`를, `TodoQueryService`는 `TodoFocusQueryService`를 구현합니다. `FocusFacade`는 두 구현 클래스를 직접 참조하지 않습니다. 인터페이스 이름과 메서드는 실제로 필요한 계약에 맞춰 정의합니다.
 
 즉시 완료할 필요가 없는 후속 처리는 도메인 이벤트를 검토하고, 재시도와 실패 처리도 함께 결정합니다.
 
@@ -212,7 +217,7 @@ memberCommandService.updateProfileImage(memberId, storedFile.objectKey());
 
 ### 구현 방식
 
-- Service와 Facade는 기본적으로 구체 클래스로 작성합니다. 구현 교체나 모듈 경계 분리가 필요할 때 인터페이스를 도입합니다.
+- 같은 도메인 내부의 Service와 Facade는 기본적으로 구체 클래스로 사용합니다. 다른 도메인에 공개하는 서비스 계약은 인터페이스로 정의하며, 구현 교체나 모듈 경계 분리가 필요한 경우에도 인터페이스를 도입할 수 있습니다.
 - `Service`와 `ServiceImpl`을 기계적으로 분리하지 않습니다.
 - Spring Bean은 생성자 주입을 사용합니다.
 - 업무 의미가 있는 리터럴은 이름 있는 상수나 타입으로 표현합니다.
@@ -223,9 +228,9 @@ memberCommandService.updateProfileImage(memberId, storedFile.objectKey());
 
 - 호출 조건, 보장 결과, 부수 효과를 필요한 만큼 설명합니다.
 - 검사 대상의 매개변수와 반환값은 `@param`·`@return`에 짧게 설명하고, 형식·단위·범위가 있으면 함께 적습니다.
-- `@throws`는 발생 조건을 설명합니다. 호출자가 알아야 할 전파 예외를 기록하며, Checkstyle의 구체적인 검사 범위는 설정 도입 시 정합니다.
+- `@throws`는 발생 조건을 설명합니다. 호출자가 알아야 할 전파 예외를 기록하며, Checkstyle은 `validateThrows = true`로 검사합니다.
 - 테스트 클래스와 테스트 메서드에는 Javadoc을 작성하지 않습니다. 테스트 설명과 주석은 아래 테스트 규칙을 따릅니다.
-- 비공개 구현, 의미가 명확한 Getter·Setter와 계약을 그대로 따르는 `@Override`는 Javadoc을 생략할 수 있습니다. Checkstyle 설정 도입 시 이 기준과 테스트의 Javadoc 제외 규칙을 반영합니다.
+- 비공개 구현, 의미가 명확한 Getter·Setter와 계약을 그대로 따르는 `@Override`는 Javadoc을 생략할 수 있습니다. 검사 범위는 [Checkstyle 설정](../../config/checkstyle/checkstyle.xml)과 [테스트 Javadoc 제외 설정](../../config/checkstyle/suppressions.xml)을 따릅니다.
 - 작성자·작성일·변경 이력, 미확정 규칙과 검사 통과용 문구를 적지 않습니다.
 
 ### 포맷
@@ -332,13 +337,13 @@ DTO는 경계의 데이터 전달과 단순 변환만 담당합니다. 입력·�
 
 | 도구 | 검사·측정할 내용 |
 | --- | --- |
-| JaCoCo | 테스트 커버리지 보고서 생성. 최소 기준과 적용 범위는 빌드 설정 도입 시 결정 |
+| JaCoCo | 추후 CI에서 테스트 커버리지 HTML·XML 보고서 생성. 로컬 기본 검사에서는 비활성화하며 최소 통과 기준은 설정하지 않음 |
 | Spotless | Google Java Format 기반 포맷과 import 정리. 포맷 검사는 이 도구로 통일 |
 | SpotBugs | 컴파일된 코드의 잠재적 버그 패턴 검사 |
 | Checkstyle | 네이밍·Javadoc 등 작성 규칙 검사. Spotless와 중복되거나 충돌하는 포맷 검사는 제외 |
 | ArchUnit | 계층·모듈 의존 방향, 순환 의존과 Aggregate 간 접근 등 코드 구조로 표현 가능한 규칙 검증 |
 
-다섯 도구를 품질 검사 기준으로 사용합니다. 현재 저장소에는 애플리케이션 빌드와 품질 검사 설정이 도입되지 않았으며, 아래 명령은 Gradle Wrapper와 설정 도입 후 사용할 기준입니다.
+로컬에서는 Spotless·SpotBugs·Checkstyle·ArchUnit을 사용하고, JaCoCo는 추후 CI에서 별도 실행합니다. 공통 설정은 [gradle/quality.gradle](../../gradle/quality.gradle)에 두고 `apps:api`와 세 연동 모듈에 적용합니다. 플러그인 버전과 SpotBugs 타입 설정은 [루트 빌드](../../build.gradle)에서 관리합니다. Spotless 8.10.2, Google Java Format 1.28.0, SpotBugs 플러그인 6.5.13·분석기 4.10.5, Checkstyle 14.0.0, JaCoCo 0.8.13, ArchUnit 1.5.0을 사용합니다. CI 연결은 후속 작업입니다.
 
 ### 실행 명령
 
@@ -349,9 +354,13 @@ macOS·Linux    ./gradlew check
 포맷 적용      gradlew.bat spotlessApply
 ```
 
-설정 도입 시 `check`에 컴파일, 테스트, Spotless, SpotBugs, Checkstyle과 ArchUnit 검사를 연결하고, JaCoCo 보고서도 생성하도록 구성합니다. ArchUnit 규칙은 테스트로 실행하며, 커버리지 통과 기준과 각 도구의 검사 범위·제외 기준은 빌드 설정에 명시합니다. 자동 검사로 판단할 수 없는 Aggregate 소유권과 업무 의미는 코드 리뷰에서 확인합니다.
+`check`는 전체 Java 모듈의 컴파일·테스트·Spotless·SpotBugs·Checkstyle 검사를 실행합니다. JaCoCo는 기본적으로 적용하지 않으며, 추후 CI에서 `gradlew -Pcoverage=true check jacocoTestReport`로 계측과 보고서 생성을 명시적으로 활성화합니다. SpotBugs는 운영·테스트 코드의 중간 신뢰도 이상 경고를 검사하고 위반 시 실패합니다. Checkstyle은 네이밍과 운영 코드의 공개 API Javadoc을 검사하며 테스트 Javadoc은 제외합니다. 포맷 수정은 `spotlessApply`로 별도 실행합니다.
 
-CI에서도 Gradle Wrapper로 같은 검증을 실행합니다. 설정을 추가하거나 명령을 실행하기 전에는 검사가 동작하거나 통과했다고 보고하지 않습니다.
+ArchUnit은 [ArchitectureTest](../../apps/api/src/test/java/com/tomo/architecture/ArchitectureTest.java)에서 연동 모듈의 실행 앱 참조 금지, Controller·Facade의 Repository 참조 금지, Service·Entity의 HTTP DTO·Controller 참조 금지와 기능 패키지의 순환 의존을 검사합니다. 아직 대상 클래스가 없는 규칙은 빈 대상을 허용하며 클래스가 추가되면 적용됩니다. Aggregate별 소유권과 업무 의미는 코드 리뷰에서 확인합니다.
+
+보고서는 각 모듈의 `build/reports/` 아래에 생성되며 테스트가 없는 모듈의 커버리지 보고서는 생성하지 않습니다. CI는 아직 연결하지 않았으며 현재 검증은 로컬 Gradle Wrapper로 수행합니다.
+
+`gradlew installGitHooks`를 클론마다 한 번 실행하면 커밋 전에 같은 `check`를 자동 실행합니다. 훅은 코드를 자동 수정하지 않으며 검사 실패 시 커밋을 중단합니다. JaCoCo는 커밋 검사에 포함하지 않습니다. 설치와 실행 환경은 [README](../../README.md)의 커밋 전 자동 검사 절을 따릅니다.
 
 ## 기본 예제
 
