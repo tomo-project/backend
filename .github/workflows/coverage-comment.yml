@@ -1,0 +1,127 @@
+name: 📊 PR 커버리지 댓글
+
+on:
+  workflow_run:
+    workflows: ['🧪 CI']
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: coverage-comment-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: 💬 JaCoCo 댓글 작성·갱신
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # PR 코드를 체크아웃·실행하지 않고 보고서만 데이터로 읽는다.
+      - name: 📊 커버리지 집계 및 PR 댓글 갱신
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const os = require('node:os');
+            const path = require('node:path');
+            const { execFileSync } = require('node:child_process');
+            const run = context.payload.workflow_run;
+            const repo = context.repo;
+            const marker = '<!-- tomo-jacoco-coverage -->';
+            const modules = ['apps/api', 'integrations/redis', 'integrations/messaging', 'integrations/storage'];
+            const candidates = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit,
+              { ...repo, commit_sha: run.head_sha, per_page: 100 });
+            const pulls = [];
+            for (const candidate of candidates) {
+              const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: candidate.number });
+              if (pr.state === 'open' && pr.base.repo.full_name === `${repo.owner}/${repo.repo}` &&
+                  pr.head.sha === run.head_sha && pr.head.repo?.id === run.head_repository.id) pulls.push(pr);
+            }
+            if (!pulls.length) {
+              core.info('대응하는 열린 PR이 없거나 이전 커밋의 결과이므로 건너뜁니다.');
+              return;
+            }
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts,
+              { ...repo, run_id: run.id, per_page: 100 });
+            const artifact = artifacts.find(a => !a.expired &&
+              a.name === `check-reports-${run.id}-${run.run_attempt}`);
+            const reports = [];
+            const totals = { LINE: [0, 0], BRANCH: [0, 0] };
+            if (artifact) {
+              if (artifact.size_in_bytes > 20 * 1024 * 1024) throw new Error('보고서 크기 제한 초과');
+              const download = await github.rest.actions.downloadArtifact({
+                ...repo, artifact_id: artifact.id, archive_format: 'zip'
+              });
+              const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'tomo-coverage-'));
+              const archive = path.join(directory, 'reports.zip');
+              try {
+                fs.writeFileSync(archive, Buffer.from(download.data));
+                const entries = execFileSync('unzip', ['-Z1', archive],
+                  { encoding: 'utf8', maxBuffer: 1024 * 1024 }).split('\n');
+                for (const module of modules) {
+                  const entry = `${module}/build/reports/jacoco/test/jacocoTestReport.xml`;
+                  if (!entries.includes(entry)) continue;
+                  const xml = execFileSync('unzip', ['-p', archive, entry],
+                    { encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 });
+                  // JaCoCo의 report 합계는 마지막 package/group 뒤에 기록된다.
+                  const rootCounters = xml.slice(Math.max(xml.lastIndexOf('</package>') + 10,
+                    xml.lastIndexOf('</group>') + 8, xml.indexOf('>') + 1));
+                  const counters = {};
+                  for (const match of rootCounters.matchAll(/<counter\b([^>]*?)\/?\s*>/g)) {
+                    const attrs = Object.fromEntries([...match[1].matchAll(/(\w+)="([^"]*)"/g)]
+                      .map(m => [m[1], m[2]]));
+                    if (!['LINE', 'BRANCH'].includes(attrs.type)) continue;
+                    const values = [attrs.missed, attrs.covered].map(Number);
+                    if (values.some(v => !Number.isSafeInteger(v) || v < 0 || v > 1e9))
+                      throw new Error('잘못된 JaCoCo 카운터');
+                    counters[attrs.type] = values;
+                  }
+                  if (!counters.LINE) continue;
+                  reports.push({ module, counters });
+                  for (const kind of ['LINE', 'BRANCH']) {
+                    const values = counters[kind] || [0, 0];
+                    totals[kind][0] += values[0];
+                    totals[kind][1] += values[1];
+                  }
+                }
+              } finally {
+                fs.rmSync(directory, { recursive: true, force: true });
+              }
+            }
+            const percent = ([missed, covered] = [0, 0]) => missed + covered
+              ? `${(100 * covered / (missed + covered)).toFixed(2)}%` : '—';
+            const lines = [marker, `<!-- run:${run.id}:${run.run_attempt} -->`,
+              '## 📊 JaCoCo 코드 커버리지', '',
+              `CI 결과: \`${run.conclusion}\` · 커밋: \`${run.head_sha.slice(0, 7)}\``, ''];
+            if (reports.length) {
+              lines.push('| 모듈 | 코드 줄 실행 비율 | 조건 분기 실행 비율 |', '| --- | ---: | ---: |');
+              for (const { module, counters } of reports)
+                lines.push(`| \`${module}\` | ${percent(counters.LINE)} | ${percent(counters.BRANCH)} |`);
+              lines.push(`| **전체** | **${percent(totals.LINE)}** | **${percent(totals.BRANCH)}** |`, '',
+                '코드 줄 실행 비율은 테스트가 실행한 코드 줄의 비율이고, 조건 분기 실행 비율은 조건문의 참·거짓 등 각 경로를 실행한 비율입니다.', '',
+                '예를 들어 if문의 참인 경우만 테스트하면 조건 분기는 50%, 참·거짓을 모두 테스트하면 100%입니다.', '',
+                '전체는 보고서가 생성된 모듈의 카운터 합계 기준이며 최소 커버리지 기준은 적용하지 않습니다.');
+              const missing = modules.filter(m => !reports.some(r => r.module === m));
+              if (missing.length) lines.push('', `보고서 없음: ${missing.map(m => `\`${m}\``).join(', ')}`);
+            } else {
+              lines.push('커버리지 보고서가 생성되지 않았습니다. CI 로그를 확인해주세요.');
+            }
+            lines.push('', `[CI 실행·검사 보고서](https://github.com/${repo.owner}/${repo.repo}/actions/runs/${run.id})`);
+            const body = lines.join('\n');
+            for (const pr of pulls) {
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { ...repo, issue_number: pr.number, per_page: 100 });
+              const existing = comments.find(c => c.user.login === 'github-actions[bot]' && c.body?.includes(marker));
+              if (existing) {
+                const previous = existing.body.match(/<!-- run:(\d+):(\d+) -->/);
+                if (previous && (Number(previous[1]) > run.id ||
+                    (Number(previous[1]) === run.id && Number(previous[2]) > run.run_attempt))) continue;
+                await github.rest.issues.updateComment({ ...repo, comment_id: existing.id, body });
+              } else {
+                await github.rest.issues.createComment({ ...repo, issue_number: pr.number, body });
+              }
+            }
