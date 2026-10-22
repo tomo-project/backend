@@ -5,5 +5,7 @@ plugins {
 description = 'TOMO RabbitMQ 메시지 연동 모듈'
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    api 'org.springframework.boot:spring-boot-starter-amqp'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

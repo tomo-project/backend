@@ -34,11 +34,23 @@ spring:
           max-wait: 3s
   rabbitmq:
     host: ${RABBITMQ_HOST}
-    port: ${RABBITMQ_PORT}
+    port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
     virtual-host: ${RABBITMQ_VIRTUAL_HOST}
     connection-timeout: 5s
+    ssl:
+      enabled: ${RABBITMQ_SSL_ENABLED:false}
+    cache:
+      channel:
+        size: 10
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1s
+        max-interval: 10s
+        multiplier: 2.0
+        max-attempts: 3
 
 springdoc:
   api-docs:
