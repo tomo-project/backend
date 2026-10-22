@@ -27,6 +27,11 @@ springdoc:
 scalar:
   enabled: false
 
+tomo:
+  redis:
+    redisson:
+      enabled: false
+
 management:
   endpoints:
     web:

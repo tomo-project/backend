@@ -5,6 +5,9 @@ plugins {
 description = 'TOMO Redis 캐시 및 Redisson 분산 락 연동 모듈'
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    implementation 'org.redisson:redisson:3.52.0'
+    api 'org.springframework.boot:spring-boot-starter-data-redis'
+    api 'org.redisson:redisson:3.52.0'
+    api 'org.apache.commons:commons-pool2'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

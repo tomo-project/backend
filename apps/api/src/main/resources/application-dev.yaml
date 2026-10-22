@@ -33,6 +33,15 @@ spring:
       database: ${REDIS_DATABASE}
       connect-timeout: 3s
       timeout: 3s
+      ssl:
+        enabled: true
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 4
+          max-idle: 2
+          min-idle: 0
+          max-wait: 3s
   rabbitmq:
     host: ${RABBITMQ_HOST}
     port: ${RABBITMQ_PORT}
@@ -49,6 +58,15 @@ springdoc:
 scalar:
   enabled: ${OPENAPI_ENABLED}
   url: /v3/api-docs
+
+tomo:
+  redis:
+    redisson:
+      enabled: true
+      connection-pool-size: 4
+      connection-minimum-idle-size: 1
+      subscription-connection-pool-size: 2
+      subscription-connection-minimum-idle-size: 1
 
 management:
   endpoints:
