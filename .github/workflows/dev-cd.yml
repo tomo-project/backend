@@ -1,0 +1,223 @@
+name: 🚀 Dev CD
+
+on:
+  workflow_run:
+    workflows: ['🧪 CI']
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 🚀 개발 서버 배포
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    environment: development
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 소스 체크아웃
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: 🔍 대상 커밋 SHA 결정
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            echo "sha=$RUN_HEAD_SHA" >> "$GITHUB_OUTPUT"
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$DISPATCH_SHA" >> "$GITHUB_OUTPUT"
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 📦 CI 아티팩트 다운로드 (workflow_run)
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4
+        with:
+          name: tomo-service-${{ steps.target.outputs.sha }}
+          path: artifact/
+          run-id: ${{ steps.target.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: ☕ Java 21 준비 (workflow_dispatch 수동 빌드용)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: 🔨 수동 실행 시 JAR 빌드 및 패키징 (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          COMMIT_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          bash gradlew --no-daemon :apps:api:bootJar
+          mkdir -p artifact
+          cp apps/api/build/libs/tomo-service.jar artifact/tomo-service.jar
+          printf '%s\n' "$COMMIT_SHA" > artifact/COMMIT_SHA
+          (cd artifact && sha256sum tomo-service.jar > SHA256SUMS)
+
+      - name: 🔑 SSH 키 구성
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_KEY || secrets.DEV_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "${{ secrets.SSH_PORT || secrets.DEV_SSH_PORT || 22 }}" "${{ secrets.SSH_HOST || secrets.SSH_HOST_ || secrets.DEV_SSH_HOST }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: ⚙️ 서버 환경변수·키스토어 동기화
+        env:
+          HOST: ${{ secrets.SSH_HOST || secrets.SSH_HOST_ || secrets.DEV_SSH_HOST }}
+          PORT: ${{ secrets.SSH_PORT || secrets.DEV_SSH_PORT || 22 }}
+          USER: ${{ secrets.SSH_USER || secrets.DEV_SSH_USER || 'root' }}
+          TOMO_ENV: ${{ secrets.TOMO_ENV }}
+          AIVEN_TRUSTSTORE_BASE64: ${{ secrets.AIVEN_TRUSTSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "mkdir -p /etc/tomo /opt/tomo && chmod 755 /etc/tomo /opt/tomo"
+          if [ -n "$TOMO_ENV" ]; then
+            printf '%s\n' "$TOMO_ENV" | ssh -p "$PORT" "$USER@$HOST" "cat > /etc/tomo/tomo.env && chown root:tomo /etc/tomo/tomo.env && chmod 640 /etc/tomo/tomo.env"
+          fi
+          if [ -n "$AIVEN_TRUSTSTORE_BASE64" ]; then
+            printf '%s\n' "$AIVEN_TRUSTSTORE_BASE64" | ssh -p "$PORT" "$USER@$HOST" "base64 -d > /etc/tomo/aiven-truststore.p12 && chown root:tomo /etc/tomo/aiven-truststore.p12 && chmod 640 /etc/tomo/aiven-truststore.p12"
+          fi
+
+      - name: 🚚 배포 파일 전송
+        env:
+          HOST: ${{ secrets.SSH_HOST || secrets.SSH_HOST_ || secrets.DEV_SSH_HOST }}
+          PORT: ${{ secrets.SSH_PORT || secrets.DEV_SSH_PORT || 22 }}
+          USER: ${{ secrets.SSH_USER || secrets.DEV_SSH_USER || 'root' }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "mkdir -p /tmp/tomo-deploy-$SHA/artifact"
+          scp -P "$PORT" artifact/tomo-service.jar artifact/COMMIT_SHA artifact/SHA256SUMS "$USER@$HOST:/tmp/tomo-deploy-$SHA/artifact/"
+
+      - name: 🚀 원격 배포 실행 및 자동 롤백 검증
+        env:
+          HOST: ${{ secrets.SSH_HOST || secrets.SSH_HOST_ || secrets.DEV_SSH_HOST }}
+          PORT: ${{ secrets.SSH_PORT || secrets.DEV_SSH_PORT || 22 }}
+          USER: ${{ secrets.SSH_USER || secrets.DEV_SSH_USER || 'root' }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          ssh -p "$PORT" "$USER@$HOST" bash -s -- "/tmp/tomo-deploy-$SHA/artifact" "$SHA" <<'EOF'
+          set -Eeuo pipefail
+          umask 027
+
+          [[ $EUID -eq 0 ]] || { echo 'root 권한이 필요합니다.' >&2; exit 1; }
+          artifact_dir=$(realpath -e -- "$1")
+          commit=$2
+          app_dir=/opt/tomo
+          jar=$app_dir/tomo-service.jar
+          previous=$app_dir/tomo-service.previous.jar
+          health_url=http://127.0.0.1:8081/actuator/health
+
+          exec 9>/run/lock/tomo-deploy.lock
+          flock -n 9 || { echo '다른 배포가 진행 중입니다.' >&2; exit 1; }
+          [[ -d $app_dir ]] || exit 1
+          [[ -s /etc/tomo/tomo.env && -r /etc/tomo/aiven-truststore.p12 ]] || {
+            echo '서버 환경변수(/etc/tomo/tomo.env)와 MySQL truststore(/etc/tomo/aiven-truststore.p12)가 필요합니다.' >&2; exit 1;
+          }
+          [[ -f $artifact_dir/tomo-service.jar ]] || exit 1
+          [[ $(cat "$artifact_dir/COMMIT_SHA") == "$commit" ]] || {
+            echo '배포 커밋이 결과물과 일치하지 않습니다.' >&2; exit 1;
+          }
+          (cd "$artifact_dir" && sha256sum --check --strict SHA256SUMS)
+
+          install -d -m 755 /etc/systemd/system/tomo.service.d
+          printf '%s\n%s\n' '[Service]' 'Environment=SPRING_PROFILES_ACTIVE=dev' > /etc/systemd/system/tomo.service.d/profile.conf
+          systemctl daemon-reload
+
+          wait_healthy() {
+            local attempt body
+            for ((attempt=0; attempt<30; attempt++)); do
+              if systemctl is-active --quiet tomo; then
+                body=$(curl --silent --show-error --fail --max-time 3 "$health_url" 2>/dev/null) || body=''
+                if [[ $body =~ \"status\"[[:space:]]*:[[:space:]]*\"UP\" ]]; then
+                  return 0
+                fi
+              fi
+              sleep 3
+            done
+            return 1
+          }
+
+          had_previous=false
+          if [[ -e $jar ]]; then
+            if systemctl is-active --quiet tomo && wait_healthy; then
+              cp -p -- "$jar" "$previous.new"
+              mv -f -- "$previous.new" "$previous"
+              had_previous=true
+            fi
+          fi
+
+          switched=false
+          rollback() {
+            local result=$?
+            trap - ERR INT TERM
+            set +e
+            if [[ $switched == true ]]; then
+              systemctl stop tomo
+              if [[ $had_previous == true ]]; then
+                install -o root -g tomo -m 644 "$previous" "$jar.rollback"
+                mv -f -- "$jar.rollback" "$jar"
+                systemctl reset-failed tomo 2>/dev/null || true
+                if systemctl start tomo && wait_healthy; then
+                  echo '배포 실패: 이전 정상 동작 버전으로 롤백 완료.' >&2
+                else
+                  systemctl stop tomo
+                  echo '롤백 실패: 앱을 중지했습니다. 서버 저널 로그를 확인해주세요.' >&2
+                fi
+              else
+                mv -f -- "$jar" "$app_dir/tomo-service.failed.jar"
+                echo '최초 배포 실패: 이전 정상 실행본이 없어 앱을 중지했습니다.' >&2
+              fi
+            fi
+            rm -f -- "$jar.new"
+            echo '진단 명령: journalctl -u tomo -n 100 --no-pager' >&2
+            (( result != 0 )) || result=1
+            exit "$result"
+          }
+          trap rollback ERR INT TERM
+
+          install -o root -g tomo -m 644 "$artifact_dir/tomo-service.jar" "$jar.new"
+          systemctl stop tomo
+          switched=true
+          mv -f -- "$jar.new" "$jar"
+          systemctl reset-failed tomo 2>/dev/null || true
+          systemctl start tomo
+          wait_healthy
+          systemctl enable tomo
+          printf '%s\n' "$commit" > "$app_dir/COMMIT_SHA"
+          trap - ERR INT TERM
+          echo "배포 완료: $commit"
+          EOF
+
+      - name: 🧹 서버 임시 파일 정리
+        if: always()
+        env:
+          HOST: ${{ secrets.SSH_HOST || secrets.SSH_HOST_ || secrets.DEV_SSH_HOST }}
+          PORT: ${{ secrets.SSH_PORT || secrets.DEV_SSH_PORT || 22 }}
+          USER: ${{ secrets.SSH_USER || secrets.DEV_SSH_USER || 'root' }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          ssh -p "$PORT" "$USER@$HOST" "rm -rf /tmp/tomo-deploy-$SHA" || true
+          rm -rf ~/.ssh/id_rsa

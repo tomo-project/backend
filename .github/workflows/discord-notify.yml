@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows:
       - "🧪 CI"
-      - "🚀 CD"
+      - "🚀 Dev CD"
     types:
       - completed
     branches:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📣 CI/CD 디스코드 알림
+      - name: 📢 CI/CD 디스코드 알림
         uses: sarisia/actions-status-discord@v1
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
@@ -32,5 +32,5 @@ jobs:
             **🧾 커밋:** `${{ github.event.workflow_run.head_sha }}`
 
           url: ${{ github.event.workflow_run.html_url }}
-          username: 📣 CI/CD 알림
+          username: 📢 CI/CD 알림
           nocontext: true

@@ -82,6 +82,9 @@ tomo:
       subscription-connection-minimum-idle-size: 1
 
 management:
+  server:
+    address: 127.0.0.1
+    port: 8081
   endpoints:
     web:
       exposure:
