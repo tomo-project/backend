@@ -80,6 +80,9 @@ tomo:
       connection-minimum-idle-size: 1
       subscription-connection-pool-size: 2
       subscription-connection-minimum-idle-size: 1
+  metrics:
+    username: ${MANAGEMENT_PROMETHEUS_USERNAME:tomo-metrics}
+    password: ${MANAGEMENT_PROMETHEUS_PASSWORD}
 
 management:
   server:
@@ -88,7 +91,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS}
+        include: ${MANAGEMENT_ENDPOINTS:health,prometheus}
   endpoint:
     health:
       show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: dev
