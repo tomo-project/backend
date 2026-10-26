@@ -33,13 +33,19 @@ jobs:
             const repo = context.repo;
             const marker = '<!-- tomo-jacoco-coverage -->';
             const modules = ['apps/api', 'integrations/redis', 'integrations/messaging', 'integrations/storage'];
-            const candidates = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit,
-              { ...repo, commit_sha: run.head_sha, per_page: 100 });
-            const pulls = [];
-            for (const candidate of candidates) {
-              const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: candidate.number });
-              if (pr.state === 'open' && pr.base.repo.full_name === `${repo.owner}/${repo.repo}` &&
-                  pr.head.sha === run.head_sha && pr.head.repo?.id === run.head_repository.id) pulls.push(pr);
+            let pulls = [];
+            if (run.pull_requests && run.pull_requests.length > 0) {
+              for (const p of run.pull_requests) {
+                const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: p.number });
+                if (pr.state === 'open' && pr.base.repo.full_name === `${repo.owner}/${repo.repo}` &&
+                    pr.head.sha === run.head_sha) pulls.push(pr);
+              }
+            }
+            if (!pulls.length) {
+              const openPulls = await github.paginate(github.rest.pulls.list,
+                { ...repo, state: 'open', per_page: 100 });
+              pulls = openPulls.filter(pr => pr.head.sha === run.head_sha &&
+                pr.base.repo.full_name === `${repo.owner}/${repo.repo}`);
             }
             if (!pulls.length) {
               core.info('대응하는 열린 PR이 없거나 이전 커밋의 결과이므로 건너뜁니다.');
