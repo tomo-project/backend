@@ -10,7 +10,7 @@ public class MaskingMessageConverter extends CompositeConverter<ILoggingEvent> {
   private static final String MASKED = "******";
 
   private static final Pattern BEARER_PATTERN =
-      Pattern.compile("(?i)\\b(Bearer\\s+)[A-Za-z0-9\\-_=.]+");
+      Pattern.compile("(?i)\\b(Bearer[ \\t]+)[A-Za-z0-9._~+/=-]+");
 
   private static final Pattern KEY_VALUE_PATTERN =
       Pattern.compile(

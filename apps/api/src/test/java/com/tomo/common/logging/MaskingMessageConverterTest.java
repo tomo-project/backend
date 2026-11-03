@@ -78,6 +78,19 @@ class MaskingMessageConverterTest {
   }
 
   @Test
+  @DisplayName("Bearer 토큰의 슬래시와 더하기 및 물결표와 패딩까지 모두 마스킹된다")
+  void masksCompleteBearerToken() {
+    // given
+    String input = "Authorization header: bEaReR abc/def+ghi~jkl.mno_pqr-stu==, requestId=123";
+
+    // when
+    String masked = MaskingMessageConverter.mask(input);
+
+    // then
+    assertThat(masked).isEqualTo("Authorization header: bEaReR ******, requestId=123");
+  }
+
+  @Test
   @DisplayName("JWT 형식의 토큰 문자열은 독립적으로 마스킹된다")
   void masksJwtToken() {
     String jwt =

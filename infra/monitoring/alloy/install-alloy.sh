@@ -50,6 +50,7 @@ if [ -f "$JOURNALD_CONF_SRC" ]; then
 else
   cat <<'EOF' > /etc/systemd/journald.conf.d/tomo.conf
 [Journal]
+Storage=persistent
 SystemMaxUse=200M
 SystemMaxFileSize=50M
 MaxRetentionSec=7day
@@ -58,7 +59,9 @@ RateLimitBurst=10000
 EOF
   chmod 644 /etc/systemd/journald.conf.d/tomo.conf
 fi
+install -d -o root -g systemd-journal -m 2755 /var/log/journal
 systemctl restart systemd-journald
+journalctl --flush
 
 echo "=== 3. Alloy 권한 및 설정 배포 ==="
 # Alloy가 systemd journal 로그를 읽을 수 있도록 그룹에 추가
@@ -73,10 +76,10 @@ GCLOUD_HOSTED_LOGS_URL="https://logs-prod-030.grafana.net/loki/api/v1/push"
 GCLOUD_HOSTED_LOGS_ID="1849388"
 GCLOUD_RW_API_KEY=""
 EOF
-  chown root:alloy /etc/alloy/alloy.env
-  chmod 640 /etc/alloy/alloy.env
   echo "⚠️  /etc/alloy/alloy.env 파일에 GCLOUD_RW_API_KEY(Grafana Cloud 토큰)를 입력해 주세요."
 fi
+chown root:alloy /etc/alloy/alloy.env
+chmod 640 /etc/alloy/alloy.env
 
 # systemd alloy 서비스에 EnvironmentFile 등록
 mkdir -p /etc/systemd/system/alloy.service.d
