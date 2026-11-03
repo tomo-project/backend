@@ -53,4 +53,10 @@ loki.write "grafana_cloud_loki" {
     max_backoff_period  = "5m"
     max_backoff_retries = 10
   }
+
+  // Micro 인스턴스의 디스크 고갈을 방지하기 위해 디스크 WAL을 비활성화하고,
+  // 인메모리 버퍼 큐와 최대 10회 백오프 재시도(초과 시 드롭)로 버퍼 상한을 제한
+  wal {
+    enabled = false
+  }
 }

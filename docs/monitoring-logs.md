@@ -2,6 +2,19 @@
 
 관련 이슈: #35. Spring Boot `tomo-api`의 dev 로그를 stdout → `tomo.service`의 systemd journal → Grafana Alloy → Grafana Cloud Loki 순서로 전송한다.
 
+## 수집 방식 비교 및 선정 근거
+
+이슈 #35의 요구사항에 따라 애플리케이션 메모리 부하, 서버 보안 권한, 전송 안정성을 비교하여 로그 수집 방식을 결정했다.
+
+| 비교 항목 | Logback 직접 전송 (Loki4j 등) | Promtail | Grafana Alloy (최종 선정) |
+| --- | --- | --- | --- |
+| **메모리·자원 격리** | ⚠️ JVM 힙 메모리 공유. 네트워크 단절 시 앱 메모리 큐 폭증 및 OOM 위험 | ✅ 경량 Go 프로세스 (독립 메모리) | ✅ 경량 Go 프로세스 (독립 메모리, 약 50MB 내외) |
+| **권한 및 보안** | ⚠️ Spring Boot 애플리케이션에 Loki 인증 토큰 직접 주입 필요 | ✅ 전용 서비스 계정으로 권한 격리 | ✅ `alloy` 전용 계정 및 `root:alloy 640`으로 토큰 격리 |
+| **전송 신뢰성** | ⚠️ 전송 실패 시 Spring 요청 지연 또는 앱 스레드 블로킹 위험 | ✅ journal 기반 비동기 추적 | ✅ systemd journal 비동기 수집 + cursor 관리 + 백오프 재시도 |
+| **지속성·확장성** | ❌ 로그 전용 라이브러리로 메트릭 수집 불가 | ⚠️ Grafana 공식 Deprecated 예정 (유지보수 모드) | ✅ Grafana 차세대 표준 에이전트 (메트릭·로그 통합 파이프라인) |
+
+- **선정 근거**: NCP Micro 서버(1 vCPU, 2GB RAM) 환경에서는 애플리케이션 프로세스의 안정성이 최우선이다. Logback appender 직접 전송은 네트워크 지연 시 JVM 힙 고갈을 유발할 수 있으므로 배제했다. Promtail은 유지보수 모드로 전환되었으므로, systemd journal을 독립적으로 읽어 앱에 부하를 주지 않고 향후 메트릭 파이프라인과 단일 에이전트로 통합 가능한 **Grafana Alloy**를 선정했다.
+
 ## 구성과 보관 정책
 
 | 항목 | 설정 |
@@ -12,11 +25,23 @@
 | Cloud 보관 | 무료 플랜 기준 14일 |
 | Cloud 수집 한도 | 월 50GB, 30일 환산 일평균 약 1.67GB |
 | 로컬 journal | 영구 저장, 최대 사용량 목표 200MB, 파일당 50MB, 최대 보관 기간 7일 |
+| 전송 버퍼 제한 | 디스크 WAL 비활성화(`wal.enabled=false`), 인메모리 재시도 최대 10회 제한 후 유실 드롭 |
 | 초기 journal 조회 범위 | Alloy `max_age=12h` |
 
 무료 한도는 [Grafana 요금표](https://grafana.com/pricing/)를 2026-11-03에 확인한 값이다. 실제 플랜과 사용량은 Cloud 화면에서 다시 확인한다. 로컬 크기 제한과 유닛 필터는 Cloud 월 수집량을 보장하지 않는다.
 
 저널 설정은 [journald-tomo.conf](../infra/monitoring/journald/journald-tomo.conf)에 있다. 기본 journal namespace 전체에 적용되며 `tomo.service`만의 할당량이 아니다. 용량·기간은 최대 보관 목표이며 7일 전체를 보장하지 않는다. systemd는 활성 파일보다 보관 파일을 중심으로 정리하므로 실제 사용량이 순간적으로 목표를 넘을 수 있다. `RateLimitIntervalSec=30s`, `RateLimitBurst=10000`은 로그 폭증을 제한하며 제한된 로그는 유실될 수 있다.
+
+## 전송 버퍼 용량 제한 및 실패 유실 정책
+
+Micro 서버의 협소한 디스크 용량(20GB 내외)과 메모리를 보호하기 위해 [config.alloy](../infra/monitoring/alloy/config.alloy)에 다음 전송 버퍼 정책을 적용했다.
+
+1. **디스크 WAL 비활성화 (`wal { enabled = false }`)**:
+   - Alloy 기본 설정인 디스크 Write-Ahead Log는 전송 대기 로그를 디스크 세그먼트로 저장하여 디스크를 잠식할 위험이 있다. 이를 비활성화하여 디스크 공간을 영구 저널(200MB 목표) 외에 추가로 점유하지 않도록 제한한다.
+2. **인메모리 버퍼 상한 및 재시도 제한 (`max_backoff_retries = 10`)**:
+   - Grafana Cloud 연결 실패나 429 Quota 초과 시, `min_backoff_period=500ms`부터 `max_backoff_period=5m`까지 지수 백오프로 재시도한다.
+   - 10회 연속 실패 시 해당 배치 로그는 인메모리 큐에서 영구 폐기(Drop)되어 Alloy 프로세스의 메모리 무한 증가를 방지한다.
+   - 드롭된 로그 건수는 `loki_write_dropped_entries_total` 지표로 모니터링할 수 있다. 전송에 실패하여 유실된 로그라도 로컬 systemd 저널(최대 200MB / 7일)에 남아 있으므로 필요시 서버에서 `journalctl`로 복구 조회가 가능하다.
 
 ## 설치와 인증
 
@@ -118,5 +143,6 @@ Cloud의 Usage 또는 Cost Management and Billing 화면에서 Logs 수집량을
 - [Logback 패턴과 composite converter](https://logback.qos.ch/manual/layouts.html)
 - [systemd 저널 보관 정책](https://www.freedesktop.org/software/systemd/man/latest/journald.conf.html)
 - [Grafana Alloy journal 수집](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.journal/)
+- [Grafana Alloy loki.write 컴포넌트](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.write/)
 
 운영 절차와 관측 기록의 원본은 이 작업에서 사용자가 제공한 2026-11-02 서버 구성 자료이며, 저장소 반영일은 2026-11-03이다. 실제 토큰은 제거하고 현재 코드에 맞춰 마스킹·재설치 절차를 보완했다.
