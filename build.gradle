@@ -88,33 +88,44 @@ if (providers.gradleProperty('coverage').map { it.toBoolean() }.getOrElse(false)
         dependsOn subprojects.collect { p -> p.tasks.matching { t -> t.name == 'jacocoTestReport' } }
 
         doLast {
-            def modules = ['apps/api', 'integrations/redis', 'integrations/messaging', 'integrations/storage']
             def totals = [LINE: [0, 0], BRANCH: [0, 0]]
+            def missingReportModules = []
 
-            modules.each { modPath ->
-                def reportFile = file("${modPath}/build/reports/jacoco/test/jacocoTestReport.xml")
-                if (!reportFile.exists()) return
+            subprojects.findAll { p -> p.pluginManager.hasPlugin('java') }.each { p ->
+                def reportFile = p.layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile
+                if (reportFile.exists()) {
+                    def xml = reportFile.text
+                    def lastPkg = xml.lastIndexOf('</package>')
+                    def lastGrp = xml.lastIndexOf('</group>')
+                    def idx = Math.max(lastPkg >= 0 ? lastPkg + 10 : 0, Math.max(lastGrp >= 0 ? lastGrp + 8 : 0, xml.indexOf('>') + 1))
+                    def rootCounters = xml.substring(idx)
 
-                def xml = reportFile.text
-                def lastPkg = xml.lastIndexOf('</package>')
-                def lastGrp = xml.lastIndexOf('</group>')
-                def idx = Math.max(lastPkg >= 0 ? lastPkg + 10 : 0, Math.max(lastGrp >= 0 ? lastGrp + 8 : 0, xml.indexOf('>') + 1))
-                def rootCounters = xml.substring(idx)
-
-                def matcher = rootCounters =~ /<counter\b([^>]*?)\/?>/
-                while (matcher.find()) {
-                    def attrString = matcher.group(1)
-                    def typeMatch = attrString =~ /type="([^"]*)"/
-                    def missedMatch = attrString =~ /missed="([^"]*)"/
-                    def coveredMatch = attrString =~ /covered="([^"]*)"/
-                    if (typeMatch.find() && missedMatch.find() && coveredMatch.find()) {
-                        def type = typeMatch.group(1)
-                        if (type in ['LINE', 'BRANCH']) {
-                            totals[type][0] += missedMatch.group(1).toInteger()
-                            totals[type][1] += coveredMatch.group(1).toInteger()
+                    def matcher = rootCounters =~ /<counter\b([^>]*?)\/?>/
+                    while (matcher.find()) {
+                        def attrString = matcher.group(1)
+                        def typeMatch = attrString =~ /type="([^"]*)"/
+                        def missedMatch = attrString =~ /missed="([^"]*)"/
+                        def coveredMatch = attrString =~ /covered="([^"]*)"/
+                        if (typeMatch.find() && missedMatch.find() && coveredMatch.find()) {
+                            def type = typeMatch.group(1)
+                            if (type in ['LINE', 'BRANCH']) {
+                                totals[type][0] += missedMatch.group(1).toInteger()
+                                totals[type][1] += coveredMatch.group(1).toInteger()
+                            }
                         }
                     }
+                } else {
+                    def hasProductionClasses = p.sourceSets.main.output.classesDirs.any { dir ->
+                        dir.exists() && !fileTree(dir).matching { include '**/*.class'; exclude '**/package-info.class' }.empty
+                    }
+                    if (hasProductionClasses) {
+                        missingReportModules.add(p.path)
+                    }
                 }
+            }
+
+            if (!missingReportModules.isEmpty()) {
+                throw new GradleException("JaCoCo 커버리지 보고서가 누락된 모듈이 존재합니다: " + missingReportModules.join(', '))
             }
 
             def lineTotal = totals.LINE[0] + totals.LINE[1]
