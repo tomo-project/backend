@@ -158,7 +158,13 @@ if (coverageProp?.toBoolean() ?: false) {
         }
     }
 
-    tasks.named('check') {
+    tasks.register('jacocoTestCoverageVerification') {
+        group = 'verification'
+        description = 'JaCoCo 전체 모듈 커버리지 검증 태스크'
         dependsOn tasks.named('jacocoRootCoverageVerification')
+    }
+
+    tasks.named('check') {
+        dependsOn tasks.named('jacocoTestCoverageVerification')
     }
 }
