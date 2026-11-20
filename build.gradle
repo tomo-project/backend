@@ -80,3 +80,69 @@ subprojects {
         }
     }
 }
+
+if (providers.gradleProperty('coverage').map { it.toBoolean() }.getOrElse(false)) {
+    tasks.register('jacocoRootCoverageVerification') {
+        group = 'verification'
+        description = 'JaCoCo 전체 모듈 커버리지 검증 (라인 80%, 조건 분기 55%)'
+        dependsOn subprojects.collect { p -> p.tasks.matching { t -> t.name == 'jacocoTestReport' } }
+
+        doLast {
+            def modules = ['apps/api', 'integrations/redis', 'integrations/messaging', 'integrations/storage']
+            def totals = [LINE: [0, 0], BRANCH: [0, 0]]
+
+            modules.each { modPath ->
+                def reportFile = file("${modPath}/build/reports/jacoco/test/jacocoTestReport.xml")
+                if (!reportFile.exists()) return
+
+                def xml = reportFile.text
+                def lastPkg = xml.lastIndexOf('</package>')
+                def lastGrp = xml.lastIndexOf('</group>')
+                def idx = Math.max(lastPkg >= 0 ? lastPkg + 10 : 0, Math.max(lastGrp >= 0 ? lastGrp + 8 : 0, xml.indexOf('>') + 1))
+                def rootCounters = xml.substring(idx)
+
+                def matcher = rootCounters =~ /<counter\b([^>]*?)\/?>/
+                while (matcher.find()) {
+                    def attrString = matcher.group(1)
+                    def typeMatch = attrString =~ /type="([^"]*)"/
+                    def missedMatch = attrString =~ /missed="([^"]*)"/
+                    def coveredMatch = attrString =~ /covered="([^"]*)"/
+                    if (typeMatch.find() && missedMatch.find() && coveredMatch.find()) {
+                        def type = typeMatch.group(1)
+                        if (type in ['LINE', 'BRANCH']) {
+                            totals[type][0] += missedMatch.group(1).toInteger()
+                            totals[type][1] += coveredMatch.group(1).toInteger()
+                        }
+                    }
+                }
+            }
+
+            def lineTotal = totals.LINE[0] + totals.LINE[1]
+            def linePct = lineTotal > 0 ? (100.0 * totals.LINE[1] / lineTotal) : 0.0
+            def branchTotal = totals.BRANCH[0] + totals.BRANCH[1]
+            def branchPct = branchTotal > 0 ? (100.0 * totals.BRANCH[1] / branchTotal) : 0.0
+
+            def minLine = 80.0
+            def minBranch = 55.0
+
+            logger.lifecycle(String.format("📊 JaCoCo 전체 커버리지 결과: 코드 줄 %.2f%% (기준: %.1f%%), 조건 분기 %.2f%% (기준: %.1f%%)",
+                    linePct, minLine, branchPct, minBranch))
+
+            def violations = []
+            if (linePct < minLine) {
+                violations.add(String.format("코드 줄(LINE) 커버리지 미달: %.2f%% < %.1f%%", linePct, minLine))
+            }
+            if (branchPct < minBranch) {
+                violations.add(String.format("조건 분기(BRANCH) 커버리지 미달: %.2f%% < %.1f%%", branchPct, minBranch))
+            }
+
+            if (!violations.isEmpty()) {
+                throw new GradleException("JaCoCo 최소 커버리지 기준 미달:\n - " + violations.join("\n - "))
+            }
+        }
+    }
+
+    tasks.named('check') {
+        dependsOn tasks.named('jacocoRootCoverageVerification')
+    }
+}

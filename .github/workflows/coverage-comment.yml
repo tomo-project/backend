@@ -104,13 +104,23 @@ jobs:
               '## 📊 JaCoCo 코드 커버리지', '',
               `CI 결과: \`${run.conclusion}\` · 커밋: \`${run.head_sha.slice(0, 7)}\``, ''];
             if (reports.length) {
+              const lineTotal = totals.LINE[0] + totals.LINE[1];
+              const linePct = lineTotal > 0 ? (100 * totals.LINE[1] / lineTotal) : 0;
+              const branchTotal = totals.BRANCH[0] + totals.BRANCH[1];
+              const branchPct = branchTotal > 0 ? (100 * totals.BRANCH[1] / branchTotal) : 0;
+              const linePass = linePct >= 80.0;
+              const branchPass = branchPct >= 55.0;
+              const overallPass = linePass && branchPass;
+              const statusText = overallPass ? '✅ 기준 통과' : '❌ 기준 미달';
+
               lines.push('| 모듈 | 코드 줄 실행 비율 | 조건 분기 실행 비율 |', '| --- | ---: | ---: |');
               for (const { module, counters } of reports)
                 lines.push(`| \`${module}\` | ${percent(counters.LINE)} | ${percent(counters.BRANCH)} |`);
               lines.push(`| **전체** | **${percent(totals.LINE)}** | **${percent(totals.BRANCH)}** |`, '',
+                `최소 커버리지 기준: **코드 줄 80.00%** (${linePass ? '✅' : '❌'} ${linePct.toFixed(2)}%) · **조건 분기 55.00%** (${branchPass ? '✅' : '❌'} ${branchPct.toFixed(2)}%) → **${statusText}**`, '',
                 '코드 줄 실행 비율은 테스트가 실행한 코드 줄의 비율이고, 조건 분기 실행 비율은 조건문의 참·거짓 등 각 경로를 실행한 비율입니다.', '',
                 '예를 들어 if문의 참인 경우만 테스트하면 조건 분기는 50%, 참·거짓을 모두 테스트하면 100%입니다.', '',
-                '전체는 보고서가 생성된 모듈의 카운터 합계 기준이며 최소 커버리지 기준은 적용하지 않습니다.');
+                '전체는 보고서가 생성된 모듈의 카운터 합계 기준이며 최소 기준 미달 시 CI 검증이 실패합니다.');
               const missing = modules.filter(m => !reports.some(r => r.module === m));
               if (missing.length) lines.push('', `보고서 없음: ${missing.map(m => `\`${m}\``).join(', ')}`);
             } else {
