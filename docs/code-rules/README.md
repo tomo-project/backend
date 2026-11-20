@@ -338,13 +338,13 @@ DTO는 경계의 데이터 전달과 단순 변환만 담당합니다. 입력·�
 
 | 도구 | 검사·측정할 내용 |
 | --- | --- |
-| JaCoCo | 추후 CI에서 테스트 커버리지 HTML·XML 보고서 생성. 로컬 기본 검사에서는 비활성화하며 최소 통과 기준은 설정하지 않음 |
+| JaCoCo | CI에서 테스트 커버리지 HTML·XML 보고서 생성 및 전체 최소 커버리지 기준(라인 80%, 조건 분기 55%) 검증. 로컬 기본 검사에서는 개발 속도를 위해 비활성화 |
 | Spotless | Google Java Format 기반 포맷과 import 정리. 포맷 검사는 이 도구로 통일 |
 | SpotBugs | 컴파일된 코드의 잠재적 버그 패턴 검사 |
 | Checkstyle | 네이밍·Javadoc 등 작성 규칙 검사. Spotless와 중복되거나 충돌하는 포맷 검사는 제외 |
 | ArchUnit | 계층·모듈 의존 방향, 순환 의존과 Aggregate 간 접근 등 코드 구조로 표현 가능한 규칙 검증 |
 
-로컬에서는 Spotless·SpotBugs·Checkstyle·ArchUnit을 사용하고, JaCoCo는 추후 CI에서 별도 실행합니다. 공통 설정은 [gradle/quality.gradle](../../gradle/quality.gradle)에 두고 `apps:api`와 세 연동 모듈에 적용합니다. 플러그인 버전과 SpotBugs 타입 설정은 [루트 빌드](../../build.gradle)에서 관리합니다. Spotless 8.10.2, Google Java Format 1.28.0, SpotBugs 플러그인 6.5.13·분석기 4.10.5, Checkstyle 14.0.0, JaCoCo 0.8.13, ArchUnit 1.5.0을 사용합니다. CI 연결은 후속 작업입니다.
+로컬에서는 Spotless·SpotBugs·Checkstyle·ArchUnit을 사용하고, JaCoCo는 CI에서 실행하여 커버리지 검증과 보고서 생성을 수행합니다. 공통 설정은 [gradle/quality.gradle](../../gradle/quality.gradle)에 두고 `apps:api`와 세 연동 모듈에 적용합니다. 플러그인 버전과 SpotBugs 타입 설정 및 루트 커버리지 검증(`jacocoRootCoverageVerification`)은 [루트 빌드](../../build.gradle)에서 관리합니다. Spotless 8.10.2, Google Java Format 1.28.0, SpotBugs 플러그인 6.5.13·분석기 4.10.5, Checkstyle 14.0.0, JaCoCo 0.8.13, ArchUnit 1.5.0을 사용합니다.
 
 ### 실행 명령
 
@@ -355,11 +355,11 @@ macOS·Linux    ./gradlew check
 포맷 적용      gradlew.bat spotlessApply
 ```
 
-`check`는 전체 Java 모듈의 컴파일·테스트·Spotless·SpotBugs·Checkstyle 검사를 실행합니다. JaCoCo는 기본적으로 적용하지 않으며, 추후 CI에서 `gradlew -Pcoverage=true check jacocoTestReport`로 계측과 보고서 생성을 명시적으로 활성화합니다. SpotBugs는 운영·테스트 코드의 중간 신뢰도 이상 경고를 검사하고 위반 시 실패합니다. Checkstyle은 네이밍과 운영 코드의 공개 API Javadoc을 검사하며 테스트 Javadoc은 제외합니다. 포맷 수정은 `spotlessApply`로 별도 실행합니다.
+`check`는 전체 Java 모듈의 컴파일·테스트·Spotless·SpotBugs·Checkstyle 검사를 실행합니다. JaCoCo는 로컬 기본 검사에는 적용하지 않으며, CI에서 `gradlew -Pcoverage=true check jacocoTestReport`로 계측과 보고서 생성 및 전체 최소 커버리지 기준(라인 80%, 조건 분기 55%) 검증을 수행합니다. SpotBugs는 운영·테스트 코드의 중간 신뢰도 이상 경고를 검사하고 위반 시 실패합니다. Checkstyle은 네이밍과 운영 코드의 공개 API Javadoc을 검사하며 테스트 Javadoc은 제외합니다. 포맷 수정은 `spotlessApply`로 별도 실행합니다.
 
 ArchUnit은 [ArchitectureTest](../../apps/api/src/test/java/com/tomo/architecture/ArchitectureTest.java)에서 연동 모듈의 실행 앱 참조 금지, Controller·Facade의 Repository 참조 금지, Service·Entity의 HTTP DTO·Controller 참조 금지와 기능 패키지의 순환 의존을 검사합니다. 아직 대상 클래스가 없는 규칙은 빈 대상을 허용하며 클래스가 추가되면 적용됩니다. Aggregate별 소유권과 업무 의미는 코드 리뷰에서 확인합니다.
 
-보고서는 각 모듈의 `build/reports/` 아래에 생성되며 테스트가 없는 모듈의 커버리지 보고서는 생성하지 않습니다. CI는 아직 연결하지 않았으며 현재 검증은 로컬 Gradle Wrapper로 수행합니다.
+보고서는 각 모듈의 `build/reports/` 아래에 생성되며 테스트가 없는 모듈의 커버리지 보고서는 생성하지 않습니다. CI 파이프라인에서 커버리지 검증과 실행 JAR 빌드를 자동 수행합니다.
 
 `gradlew installGitHooks`를 클론마다 한 번 실행하면 커밋 전에 같은 `check`를 자동 실행합니다. 훅은 코드를 자동 수정하지 않으며 검사 실패 시 커밋을 중단합니다. JaCoCo는 커밋 검사에 포함하지 않습니다. 설치와 실행 환경은 [README](../../README.md)의 커밋 전 자동 검사 절을 따릅니다.
 
