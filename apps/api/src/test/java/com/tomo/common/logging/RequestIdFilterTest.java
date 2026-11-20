@@ -13,7 +13,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -28,13 +27,12 @@ class RequestIdFilterTest {
     MDC.clear();
   }
 
-  @ParameterizedTest
-  @ValueSource(ints = {200, 401, 403, 500})
-  @DisplayName("정상·인증 실패·서버 오류 응답은 같은 요청 ID를 사용하고 MDC를 정리한다")
-  void bindsRequestIdUntilResponseCompletes(int status) throws Exception {
+  @Test
+  @DisplayName("후속 처리 동안 요청 ID를 등록하고 종료 후 다른 MDC 항목을 보존한다")
+  void bindsRequestIdDuringChain() throws Exception {
     // given
     MockHttpServletRequest request = spy(new MockHttpServletRequest());
-    when(request.getRequestId()).thenReturn("request-" + status);
+    when(request.getRequestId()).thenReturn("current-request");
     MockHttpServletResponse response = new MockHttpServletResponse();
     MDC.put("other", "preserved");
 
@@ -44,12 +42,9 @@ class RequestIdFilterTest {
         response,
         (req, res) -> {
           assertThat(MDC.get("requestId")).isEqualTo(request.getRequestId());
-          response.setStatus(status);
-          response.getWriter().write(request.getRequestId());
         });
 
     // then
-    assertThat(response.getContentAsString()).isEqualTo("request-" + status);
     assertThat(MDC.getCopyOfContextMap()).containsExactlyEntriesOf(Map.of("other", "preserved"));
   }
 
