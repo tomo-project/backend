@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.tomo.common.auth.token.AccessTokenProvider;
+import com.tomo.common.logging.RequestLoggingConfig;
 import com.tomo.user.service.LoginSessionService;
 import io.jsonwebtoken.Jwts;
 import java.time.Clock;
@@ -16,11 +17,14 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
@@ -38,7 +42,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @WebMvcTest(SecurityConfigTest.TestController.class)
-@Import({SecurityConfig.class, SecurityConfigTest.TestController.class})
+@Import({SecurityConfig.class, SecurityConfigTest.TestController.class, RequestLoggingConfig.class})
 @ActiveProfiles("test")
 class SecurityConfigTest {
   private static final Instant NOW = Instant.parse("2026-11-06T00:00:00Z");
@@ -141,8 +145,9 @@ class SecurityConfigTest {
   }
 
   @Test
+  @ExtendWith(OutputCaptureExtension.class)
   @DisplayName("로그인 세션 검증 중 서버 오류가 발생하면 공통 500 응답을 반환한다")
-  void handlesSessionValidationFailure() throws Exception {
+  void handlesSessionValidationFailure(CapturedOutput output) throws Exception {
     // given
     String token = accessTokenProvider.issue("user-id", 10L, NOW.plusSeconds(600));
 
@@ -157,6 +162,10 @@ class SecurityConfigTest {
     result
         .andExpect(status().isInternalServerError())
         .andExpect(jsonPath("$.error.code").value("INTERNAL_SERVER_ERROR"));
+    String requestId = result.andReturn().getRequest().getRequestId();
+    result.andExpect(jsonPath("$.meta.requestId").value(requestId));
+    assertThat(output.getOut()).contains("[requestId=" + requestId + "] 로그인 세션 검증 실패");
+    assertThat(org.slf4j.MDC.get("requestId")).isNull();
   }
 
   @Test
