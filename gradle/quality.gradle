@@ -29,7 +29,12 @@ tasks.withType(Checkstyle).configureEach {
     }
 }
 
-if (providers.gradleProperty('coverage').map { it.toBoolean() }.getOrElse(false)) {
+def coverageProp = providers.gradleProperty('coverage').orNull
+if (coverageProp != null && !['true', 'false'].contains(coverageProp.toLowerCase())) {
+    throw new GradleException("coverage 속성값은 'true' 또는 'false'여야 합니다. (입력값: '${coverageProp}')")
+}
+
+if (coverageProp?.toBoolean() ?: false) {
     apply plugin: 'jacoco'
 
     jacoco {
