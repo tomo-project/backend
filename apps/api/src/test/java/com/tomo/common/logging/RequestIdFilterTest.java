@@ -2,11 +2,21 @@ package com.tomo.common.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterRegistration;
+import jakarta.servlet.ServletContext;
 import jakarta.servlet.ServletException;
+import java.util.EnumSet;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -129,6 +139,27 @@ class RequestIdFilterTest {
 
     // then
     assertThat(MDC.get("requestId")).isEqualTo("outer-context");
+  }
+
+  @Test
+  @DisplayName("서블릿 컨테이너에 요청·비동기·오류 디스패치를 모두 등록한다")
+  void registersAllDispatcherTypes() throws Exception {
+    // given
+    ServletContext servletContext = mock(ServletContext.class);
+    FilterRegistration.Dynamic dynamicRegistration = mock(FilterRegistration.Dynamic.class);
+    when(servletContext.addFilter(anyString(), any(Filter.class))).thenReturn(dynamicRegistration);
+    var registration = new RequestLoggingConfig().requestIdFilter(new SecurityProperties());
+
+    // when
+    registration.onStartup(servletContext);
+
+    // then
+    verify(dynamicRegistration)
+        .addMappingForUrlPatterns(
+            eq(EnumSet.of(DispatcherType.REQUEST, DispatcherType.ASYNC, DispatcherType.ERROR)),
+            anyBoolean(),
+            eq("/*"));
+    verify(dynamicRegistration).setAsyncSupported(true);
   }
 
   @Test
