@@ -46,7 +46,9 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -89,7 +91,7 @@ class SecurityConfigTest {
       when(loginSessionService.isValidAccessSession("user-id", 10L)).thenReturn(true);
     }
     String path = expectedStatus == 403 ? "/api/denied" : "/api/request-id";
-    var requestBuilder =
+    MockHttpServletRequestBuilder requestBuilder =
         get(path)
             .with(
                 request -> {
@@ -102,7 +104,7 @@ class SecurityConfigTest {
     }
 
     // when
-    var result = requestIdMockMvc.perform(requestBuilder).andReturn();
+    MvcResult result = requestIdMockMvc.perform(requestBuilder).andReturn();
 
     // then
     assertThat(result.getResponse().getStatus()).isEqualTo(expectedStatus);

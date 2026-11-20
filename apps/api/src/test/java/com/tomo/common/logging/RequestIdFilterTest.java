@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.security.SecurityProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.web.util.WebUtils;
@@ -148,7 +149,8 @@ class RequestIdFilterTest {
     ServletContext servletContext = mock(ServletContext.class);
     FilterRegistration.Dynamic dynamicRegistration = mock(FilterRegistration.Dynamic.class);
     when(servletContext.addFilter(anyString(), any(Filter.class))).thenReturn(dynamicRegistration);
-    var registration = new RequestLoggingConfig().requestIdFilter(new SecurityProperties());
+    FilterRegistrationBean<RequestIdFilter> registration =
+        new RequestLoggingConfig().requestIdFilter(new SecurityProperties());
 
     // when
     registration.onStartup(servletContext);
@@ -170,7 +172,8 @@ class RequestIdFilterTest {
     properties.getFilter().setOrder(-200);
 
     // when
-    var registration = new RequestLoggingConfig().requestIdFilter(properties);
+    FilterRegistrationBean<RequestIdFilter> registration =
+        new RequestLoggingConfig().requestIdFilter(properties);
 
     // then
     assertThat(registration.getOrder()).isEqualTo(-201);
