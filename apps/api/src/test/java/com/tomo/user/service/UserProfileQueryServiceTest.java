@@ -58,7 +58,7 @@ class UserProfileQueryServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = AccountStatus.class,
-      names = {"PENDING", "VAN", "DELETE"})
+      names = {"PENDING", "BAN", "DELETE"})
   @DisplayName("활성 상태가 아닌 계정의 프로필 조회는 거부한다")
   void rejectsInactiveUser(AccountStatus status) {
     // given

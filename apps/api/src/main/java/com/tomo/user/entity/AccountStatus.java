@@ -4,6 +4,6 @@ package com.tomo.user.entity;
 public enum AccountStatus {
   PENDING,
   ACTIVE,
-  VAN,
+  BAN,
   DELETE
 }
