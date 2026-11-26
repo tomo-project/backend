@@ -202,9 +202,23 @@ public class CategoryCommandService {
   }
 
   private static boolean isValidCategoryName(String categoryName) {
-    return categoryName != null
-        && !categoryName.isBlank()
-        && categoryName.equals(categoryName.strip())
-        && categoryName.codePointCount(0, categoryName.length()) <= MAX_NAME_LENGTH;
+    if (categoryName == null
+        || categoryName.isBlank()
+        || !categoryName.equals(categoryName.strip())
+        || categoryName.codePointCount(0, categoryName.length()) > MAX_NAME_LENGTH) {
+      return false;
+    }
+
+    int firstCodePoint = categoryName.codePointAt(0);
+    int lastCodePoint = categoryName.codePointBefore(categoryName.length());
+    return !isWhitespaceOrSpaceSeparator(firstCodePoint)
+        && !isWhitespaceOrSpaceSeparator(lastCodePoint)
+        && categoryName
+            .codePoints()
+            .anyMatch(codePoint -> !isWhitespaceOrSpaceSeparator(codePoint));
+  }
+
+  private static boolean isWhitespaceOrSpaceSeparator(int codePoint) {
+    return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint);
   }
 }

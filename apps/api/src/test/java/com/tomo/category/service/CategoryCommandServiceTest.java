@@ -111,6 +111,40 @@ class CategoryCommandServiceTest {
   }
 
   @Test
+  @DisplayName("카테고리 이름이 줄 바꿈 없는 공백으로만 이루어져 있으면 INVALID_CATEGORY_NAME을 던진다")
+  void rejectsNonBreakingSpaceOnlyCategoryName() {
+    // when
+    Throwable thrown = catchThrowable(() -> service.createCategory(USER_ID, "\u00A0\u00A0"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.INVALID_CATEGORY_NAME));
+
+    verifyNoInteractions(categoryRepository);
+  }
+
+  @Test
+  @DisplayName("카테고리 이름 양 끝에 줄 바꿈 없는 공백이 있으면 INVALID_CATEGORY_NAME을 던진다")
+  void rejectsCategoryNameWithSurroundingNonBreakingSpace() {
+    // when
+    Throwable thrown = catchThrowable(() -> service.createCategory(USER_ID, "\u00A0전공\u00A0"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.INVALID_CATEGORY_NAME));
+
+    verifyNoInteractions(categoryRepository);
+  }
+
+  @Test
   @DisplayName("카테고리 이름에 앞뒤 공백이 있으면 INVALID_CATEGORY_NAME을 던진다")
   void rejectsCategoryNameWithSurroundingWhitespace() {
     // when
