@@ -4,6 +4,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -11,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.CategoryFacade;
 import com.tomo.category.service.command.CreateCategoryCommand;
+import com.tomo.category.service.model.CategoryItemResult;
+import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.config.SecurityConfig;
 import com.tomo.common.auth.token.AccessTokenProvider;
 import com.tomo.common.exception.BusinessException;
@@ -19,6 +22,7 @@ import io.jsonwebtoken.Jwts;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,7 +65,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"전공\"}"));
+                .content("{\"category_nm\":\"전공\"}"));
 
     // then
     result
@@ -111,7 +115,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"   \"}"));
+                .content("{\"category_nm\":\"   \"}"));
 
     // then
     result
@@ -135,7 +139,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\" 전공 \"}"));
+                .content("{\"category_nm\":\" 전공 \"}"));
 
     // then
     result
@@ -160,7 +164,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"" + tooLongName + "\"}"));
+                .content("{\"category_nm\":\"" + tooLongName + "\"}"));
 
     // then
     result
@@ -177,7 +181,7 @@ class CategoryControllerTest {
     // when
     ResultActions result =
         mockMvc.perform(
-            post(PATH).contentType(MediaType.APPLICATION_JSON).content("{\"category\":\"전공\"}"));
+            post(PATH).contentType(MediaType.APPLICATION_JSON).content("{\"category_nm\":\"전공\"}"));
 
     // then
     result
@@ -204,7 +208,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"전공\"}"));
+                .content("{\"category_nm\":\"전공\"}"));
 
     // then
     result
@@ -229,7 +233,7 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"전공\"}"));
+                .content("{\"category_nm\":\"전공\"}"));
 
     // then
     result
@@ -254,12 +258,60 @@ class CategoryControllerTest {
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category\":\"전공\"}"));
+                .content("{\"category_nm\":\"전공\"}"));
 
     // then
     result
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error.code").value("CONCURRENT_REQUEST_CONFLICT"));
+  }
+
+  @Test
+  @DisplayName("유효한 JWT로 카테고리 목록을 조회하면 200과 data.category 배열을 반환한다")
+  void returnsCategoryList() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    when(categoryFacade.getCategories(USER_ID))
+        .thenReturn(
+            new CategoryListResult(
+                List.of(new CategoryItemResult(1L, "전공"), new CategoryItemResult(2L, "교양"))));
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data.category[0].categoryId").value(1))
+        .andExpect(jsonPath("$.data.category[0].category_nm").value("전공"))
+        .andExpect(jsonPath("$.data.category[1].categoryId").value(2))
+        .andExpect(jsonPath("$.data.category[1].category_nm").value("교양"))
+        .andExpect(jsonPath("$.meta.requestId").exists())
+        .andExpect(jsonPath("$.meta.timestamp").isNotEmpty());
+
+    verify(categoryFacade).getCategories(USER_ID);
+  }
+
+  @Test
+  @DisplayName("카테고리 목록 조회 권한이 없으면 403 CATEGORY_VIEW_FORBIDDEN을 반환한다")
+  void returnsCategoryViewForbidden() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    when(categoryFacade.getCategories(USER_ID))
+        .thenThrow(new BusinessException(CategoryErrorCode.CATEGORY_VIEW_FORBIDDEN));
+
+    // when
+    ResultActions result =
+        mockMvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.error.code").value("CATEGORY_VIEW_FORBIDDEN"));
   }
 
   private String accessToken() {

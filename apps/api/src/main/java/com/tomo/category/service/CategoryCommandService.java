@@ -4,6 +4,8 @@ import com.tomo.category.entity.Category;
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.repository.CategoryRepository;
 import com.tomo.common.exception.BusinessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 /** 공부 카테고리의 생성·수정·삭제를 수행한다. */
 @Service
 public class CategoryCommandService {
+  private static final Logger LOG = LoggerFactory.getLogger(CategoryCommandService.class);
+
   /** 카테고리 이름 최대 길이. */
   public static final int MAX_NAME_LENGTH = 100;
 
@@ -37,6 +41,7 @@ public class CategoryCommandService {
     validateCategoryName(categoryName);
 
     if (categoryRepository.existsByUserIdAndCategoryName(userId, categoryName)) {
+      LOG.debug("카테고리 생성 거부. 동일한 이름의 카테고리 존재");
       throw new BusinessException(CategoryErrorCode.CATEGORY_ALREADY_EXISTS);
     }
 
@@ -45,6 +50,7 @@ public class CategoryCommandService {
     try {
       categoryRepository.saveAndFlush(category);
     } catch (DataIntegrityViolationException exception) {
+      LOG.debug("카테고리 생성 동시 요청 충돌 발생");
       throw new BusinessException(CategoryErrorCode.CONCURRENT_REQUEST_CONFLICT);
     }
   }
@@ -62,6 +68,7 @@ public class CategoryCommandService {
         || categoryName.isBlank()
         || !categoryName.equals(categoryName.strip())
         || categoryName.length() > MAX_NAME_LENGTH) {
+      LOG.debug("카테고리 이름 유효성 검증 실패");
       throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_NAME);
     }
   }

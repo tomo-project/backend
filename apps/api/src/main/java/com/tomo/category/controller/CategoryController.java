@@ -2,6 +2,7 @@ package com.tomo.category.controller;
 
 import com.tomo.category.controller.docs.CategoryApiDocs;
 import com.tomo.category.dto.request.CategoryCreateRequest;
+import com.tomo.category.dto.response.CategoryListResponse;
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.CategoryCommandService;
 import com.tomo.category.service.CategoryFacade;
@@ -11,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -52,12 +54,30 @@ public class CategoryController implements CategoryApiDocs {
       throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_NAME);
     }
 
-    CategoryCommandService.validateCategoryName(requestBody.category());
+    CategoryCommandService.validateCategoryName(requestBody.categoryName());
 
     categoryFacade.createCategory(requestBody.toCommand(userId));
 
     LOG.debug("카테고리 생성 완료");
 
     return CommonResponse.successWithoutData(request.getRequestId());
+  }
+
+  /**
+   * 현재 인증된 사용자의 공부 카테고리 목록을 조회한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param request HTTP 요청
+   * @return 공부 카테고리 목록 응답
+   */
+  @Override
+  @GetMapping
+  public CommonResponse<CategoryListResponse> getCategories(
+      @AuthenticationPrincipal String userId, HttpServletRequest request) {
+    CategoryListResponse response = CategoryListResponse.from(categoryFacade.getCategories(userId));
+
+    LOG.debug("카테고리 목록 조회 완료");
+
+    return CommonResponse.success(response, request.getRequestId());
   }
 }

@@ -1,12 +1,14 @@
 package com.tomo.category.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.tomo.category.entity.Category;
+import com.tomo.category.service.model.CategoryItemResult;
 import com.tomo.user.entity.User;
 import com.tomo.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,9 +49,11 @@ class CategoryPersistenceTest {
     categoryRepository.saveAndFlush(new Category(user.getId(), "전공"));
 
     // when
+    Throwable thrown =
+        catchThrowable(() -> categoryRepository.saveAndFlush(new Category(user.getId(), "전공")));
+
     // then
-    assertThatThrownBy(() -> categoryRepository.saveAndFlush(new Category(user.getId(), "전공")))
-        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(thrown).isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
@@ -68,5 +72,28 @@ class CategoryPersistenceTest {
     assertThat(firstSaved.getId()).isNotEqualTo(secondSaved.getId());
     assertThat(categoryRepository.existsByUserIdAndCategoryName(firstUser.getId(), "전공")).isTrue();
     assertThat(categoryRepository.existsByUserIdAndCategoryName(secondUser.getId(), "전공")).isTrue();
+  }
+
+  @Test
+  @DisplayName("사용자의 카테고리 목록을 ID 오름차순으로 조회한다")
+  void findsAllCategoriesByUserIdOrderedByIdAsc() {
+    // given
+    User owner = userRepository.saveAndFlush(User.createPending());
+    User otherUser = userRepository.saveAndFlush(User.createPending());
+
+    Category first = categoryRepository.saveAndFlush(new Category(owner.getId(), "전공"));
+    Category second = categoryRepository.saveAndFlush(new Category(owner.getId(), "교양"));
+    categoryRepository.saveAndFlush(new Category(otherUser.getId(), "자격증"));
+    entityManager.clear();
+
+    // when
+    List<CategoryItemResult> results =
+        categoryRepository.findAllItemsByUserIdOrderByIdAsc(owner.getId());
+
+    // then
+    assertThat(results)
+        .containsExactly(
+            new CategoryItemResult(first.getId(), "전공"),
+            new CategoryItemResult(second.getId(), "교양"));
   }
 }

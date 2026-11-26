@@ -1,6 +1,7 @@
 package com.tomo.category.controller.docs;
 
 import com.tomo.category.dto.request.CategoryCreateRequest;
+import com.tomo.category.dto.response.CategoryListResponse;
 import com.tomo.common.openapi.OpenApiConfig;
 import com.tomo.common.response.CommonResponse;
 import com.tomo.common.response.ErrorResponse;
@@ -191,5 +192,118 @@ public interface CategoryApiDocs {
   CommonResponse<Void> createCategory(
       @Parameter(hidden = true) String userId,
       CategoryCreateRequest requestBody,
+      @Parameter(hidden = true) HttpServletRequest request);
+
+  /**
+   * 인증된 사용자의 공부 카테고리 목록을 조회한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param request HTTP 요청
+   * @return 공부 카테고리 목록 응답
+   */
+  @Operation(
+      summary = "카테고리 목록 조회",
+      description = "Access Token으로 인증된 사용자 본인의 공부 카테고리 목록을 조회합니다.",
+      security = @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH))
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "카테고리 목록 조회 성공",
+        useReturnTypeSchema = true,
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": true,
+                              "data": {
+                                "category": [
+                                  {
+                                    "categoryId": 1,
+                                    "category_nm": "전공"
+                                  }
+                                ]
+                              },
+                              "meta": {
+                                "requestId": "req_01J9ABCDEF",
+                                "timestamp": "2026-10-06T10:00:00+09:00"
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "401",
+        description = "Access Token 인증 실패",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": false,
+                              "error": {
+                                "code": "INVALID_ACCESS_TOKEN",
+                                "message": "accessToken이 없거나 형식이 올바르지 않거나 만료·폐기되었습니다."
+                              },
+                              "meta": {
+                                "requestId": "req_01J9ABCDEF",
+                                "timestamp": "2026-10-06T10:00:00+09:00"
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "403",
+        description = "카테고리 목록 조회 권한 없음",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": false,
+                              "error": {
+                                "code": "CATEGORY_VIEW_FORBIDDEN",
+                                "message": "카테고리 목록을 조회할 권한이 없습니다."
+                              },
+                              "meta": {
+                                "requestId": "req_01J9ABCDEF",
+                                "timestamp": "2026-10-06T10:00:00+09:00"
+                              }
+                            }
+                            """))),
+    @ApiResponse(
+        responseCode = "500",
+        description = "서버 내부 오류",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples =
+                    @ExampleObject(
+                        value =
+                            """
+                            {
+                              "success": false,
+                              "error": {
+                                "code": "INTERNAL_SERVER_ERROR",
+                                "message": "서버 처리 중 오류가 발생했습니다."
+                              },
+                              "meta": {
+                                "requestId": "req_01J9ABCDEF",
+                                "timestamp": "2026-10-06T10:00:00+09:00"
+                              }
+                            }
+                            """)))
+  })
+  CommonResponse<CategoryListResponse> getCategories(
+      @Parameter(hidden = true) String userId,
       @Parameter(hidden = true) HttpServletRequest request);
 }

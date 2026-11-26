@@ -71,6 +71,7 @@ public class UserProfileQueryService implements UserCategoryQueryService {
   @Transactional(readOnly = true)
   public boolean isActiveCategoryUser(String userId) {
     if (userId == null || userId.isBlank()) {
+      LOG.debug("카테고리 사용자 확인 거부. 인증 사용자 ID 없음");
       throw new BusinessException(AuthErrorCode.INVALID_ACCESS_TOKEN);
     }
 

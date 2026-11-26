@@ -10,6 +10,9 @@ public enum CategoryErrorCode implements ErrorCode {
   /** 카테고리를 생성할 권한이 없습니다. */
   CATEGORY_CREATE_FORBIDDEN(403, "카테고리를 생성할 권한이 없습니다."),
 
+  /** 카테고리 목록을 조회할 권한이 없습니다. */
+  CATEGORY_VIEW_FORBIDDEN(403, "카테고리 목록을 조회할 권한이 없습니다."),
+
   /** 동일한 이름의 카테고리가 이미 존재합니다. */
   CATEGORY_ALREADY_EXISTS(409, "동일한 이름의 카테고리가 이미 존재합니다."),
 

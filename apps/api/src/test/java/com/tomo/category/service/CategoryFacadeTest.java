@@ -8,9 +8,12 @@ import static org.mockito.Mockito.when;
 
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.command.CreateCategoryCommand;
+import com.tomo.category.service.model.CategoryItemResult;
+import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.exception.AuthErrorCode;
 import com.tomo.common.exception.BusinessException;
 import com.tomo.user.service.UserCategoryQueryService;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,12 +27,14 @@ class CategoryFacadeTest {
 
   @Mock private UserCategoryQueryService userCategoryQueryService;
   @Mock private CategoryCommandService categoryCommandService;
+  @Mock private CategoryQueryService categoryQueryService;
 
   private CategoryFacade facade;
 
   @BeforeEach
   void setUp() {
-    facade = new CategoryFacade(userCategoryQueryService, categoryCommandService);
+    facade =
+        new CategoryFacade(userCategoryQueryService, categoryCommandService, categoryQueryService);
   }
 
   @Test
@@ -163,5 +168,57 @@ class CategoryFacadeTest {
                     .isEqualTo(CategoryErrorCode.INVALID_CATEGORY_NAME));
 
     verifyNoInteractions(userCategoryQueryService, categoryCommandService);
+  }
+
+  @Test
+  @DisplayName("활성 사용자는 본인의 공부 카테고리 목록을 조회한다")
+  void returnsCategoriesForActiveUser() {
+    // given
+    CategoryListResult expected = new CategoryListResult(List.of(new CategoryItemResult(1L, "전공")));
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(true);
+    when(categoryQueryService.getCategories(USER_ID)).thenReturn(expected);
+
+    // when
+    CategoryListResult result = facade.getCategories(USER_ID);
+
+    // then
+    assertThat(result).isEqualTo(expected);
+    verify(categoryQueryService).getCategories(USER_ID);
+  }
+
+  @Test
+  @DisplayName("활성 상태가 아닌 사용자의 카테고리 목록 조회는 CATEGORY_VIEW_FORBIDDEN으로 거부한다")
+  void rejectsGetCategoriesForInactiveUser() {
+    // given
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(false);
+
+    // when
+    Throwable thrown = catchThrowable(() -> facade.getCategories(USER_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_VIEW_FORBIDDEN));
+
+    verifyNoInteractions(categoryQueryService);
+  }
+
+  @Test
+  @DisplayName("카테고리 목록 조회 시 사용자 ID가 공백이면 INVALID_ACCESS_TOKEN으로 거부한다")
+  void rejectsGetCategoriesForBlankUserId() {
+    // when
+    Throwable thrown = catchThrowable(() -> facade.getCategories("   "));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.INVALID_ACCESS_TOKEN));
+
+    verifyNoInteractions(userCategoryQueryService, categoryQueryService);
   }
 }
