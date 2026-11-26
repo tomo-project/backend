@@ -80,15 +80,35 @@ class CategoryPersistenceTest {
   }
 
   @Test
-  @DisplayName("사용자의 카테고리 목록을 ID 오름차순으로 조회한다")
+  @DisplayName("사용자의 카테고리 목록을 삽입 순서나 이름 순서와 무관하게 ID 오름차순으로 조회한다")
   void findsAllCategoriesByUserIdOrderedByIdAsc() {
     // given
     User owner = userRepository.saveAndFlush(User.createPending());
     User otherUser = userRepository.saveAndFlush(User.createPending());
 
-    Category first = categoryRepository.saveAndFlush(new Category(owner.getId(), "전공"));
-    Category second = categoryRepository.saveAndFlush(new Category(owner.getId(), "교양"));
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    entityManager
+        .createNativeQuery(
+            "INSERT INTO category (category_id, users_id, category_nm, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?)")
+        .setParameter(1, 200L)
+        .setParameter(2, owner.getId())
+        .setParameter(3, "교양")
+        .setParameter(4, now)
+        .setParameter(5, now)
+        .executeUpdate();
+    entityManager
+        .createNativeQuery(
+            "INSERT INTO category (category_id, users_id, category_nm, created_at, updated_at) "
+                + "VALUES (?, ?, ?, ?, ?)")
+        .setParameter(1, 100L)
+        .setParameter(2, owner.getId())
+        .setParameter(3, "전공")
+        .setParameter(4, now)
+        .setParameter(5, now)
+        .executeUpdate();
     categoryRepository.saveAndFlush(new Category(otherUser.getId(), "자격증"));
+    entityManager.flush();
     entityManager.clear();
 
     // when
@@ -97,9 +117,7 @@ class CategoryPersistenceTest {
 
     // then
     assertThat(results)
-        .containsExactly(
-            new CategoryItemResult(first.getId(), "전공"),
-            new CategoryItemResult(second.getId(), "교양"));
+        .containsExactly(new CategoryItemResult(100L, "전공"), new CategoryItemResult(200L, "교양"));
   }
 
   @Test
