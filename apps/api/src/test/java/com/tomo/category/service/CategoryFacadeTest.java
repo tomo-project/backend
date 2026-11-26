@@ -297,4 +297,70 @@ class CategoryFacadeTest {
 
     verifyNoInteractions(userCategoryQueryService, categoryCommandService);
   }
+
+  @Test
+  @DisplayName("활성 사용자이고 유효한 카테고리 ID이면 카테고리 삭제 서비스를 호출한다")
+  void deletesCategoryForActiveUser() {
+    // given
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(true);
+
+    // when
+    facade.deleteCategory(USER_ID, CATEGORY_ID);
+
+    // then
+    verify(categoryCommandService).deleteCategory(USER_ID, CATEGORY_ID);
+  }
+
+  @Test
+  @DisplayName("활성 상태가 아닌 사용자의 카테고리 삭제는 CATEGORY_DELETE_FORBIDDEN으로 거부한다")
+  void rejectsDeleteCategoryForInactiveUser() {
+    // given
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(false);
+
+    // when
+    Throwable thrown = catchThrowable(() -> facade.deleteCategory(USER_ID, CATEGORY_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN));
+
+    verifyNoInteractions(categoryCommandService);
+  }
+
+  @Test
+  @DisplayName("카테고리 삭제 시 사용자 ID가 공백이면 INVALID_ACCESS_TOKEN으로 거부한다")
+  void rejectsDeleteCategoryForBlankUserId() {
+    // when
+    Throwable thrown = catchThrowable(() -> facade.deleteCategory("   ", CATEGORY_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.INVALID_ACCESS_TOKEN));
+
+    verifyNoInteractions(userCategoryQueryService, categoryCommandService);
+  }
+
+  @Test
+  @DisplayName("카테고리 삭제 시 ID가 0 이하이면 사용자 조회 전에 INVALID_CATEGORY_ID로 거부한다")
+  void rejectsDeleteCategoryWithInvalidIdBeforeUserCheck() {
+    // when
+    Throwable thrown = catchThrowable(() -> facade.deleteCategory(USER_ID, 0L));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.INVALID_CATEGORY_ID));
+
+    verifyNoInteractions(userCategoryQueryService, categoryCommandService);
+  }
 }

@@ -7,6 +7,7 @@ import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.exception.AuthErrorCode;
 import com.tomo.common.exception.BusinessException;
 import com.tomo.user.service.UserCategoryQueryService;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,9 @@ public class CategoryFacade {
    * @param categoryCommandService 카테고리 생성·변경 서비스
    * @param categoryQueryService 카테고리 조회 서비스
    */
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "Spring이 관리하는 서비스 빈을 공유 의존성으로 주입받는다.")
   public CategoryFacade(
       UserCategoryQueryService userCategoryQueryService,
       CategoryCommandService categoryCommandService,
@@ -105,5 +109,30 @@ public class CategoryFacade {
 
     categoryCommandService.updateCategory(
         command.userId(), command.categoryId(), command.categoryName());
+  }
+
+  /**
+   * 인증된 사용자의 공부 카테고리를 삭제한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param categoryId 삭제할 카테고리 ID
+   * @throws BusinessException 인증 정보가 없거나, 카테고리 ID가 유효하지 않거나, 삭제 권한이 없거나, 대상이 존재하지 않거나, 동시 삭제 충돌이
+   *     발생한 경우
+   */
+  @Transactional
+  public void deleteCategory(String userId, Long categoryId) {
+    if (userId == null || userId.isBlank()) {
+      LOG.debug("카테고리 삭제 거부. 인증 사용자 ID 없음");
+      throw new BusinessException(AuthErrorCode.INVALID_ACCESS_TOKEN);
+    }
+
+    CategoryCommandService.validateDeleteCategoryId(categoryId);
+
+    if (!userCategoryQueryService.isActiveCategoryUser(userId)) {
+      LOG.debug("카테고리 삭제 거부. 활성 계정이 아님");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN);
+    }
+
+    categoryCommandService.deleteCategory(userId, categoryId);
   }
 }

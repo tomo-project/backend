@@ -3,6 +3,7 @@ package com.tomo.category.service;
 import com.tomo.category.repository.CategoryRepository;
 import com.tomo.category.service.model.CategoryItemResult;
 import com.tomo.category.service.model.CategoryListResult;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,9 @@ public class CategoryQueryService {
    *
    * @param categoryRepository 카테고리 저장소
    */
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "Spring이 관리하는 JPA Repository를 공유 의존성으로 주입받는다.")
   public CategoryQueryService(CategoryRepository categoryRepository) {
     this.categoryRepository = categoryRepository;
   }

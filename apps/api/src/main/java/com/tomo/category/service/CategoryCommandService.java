@@ -6,6 +6,7 @@ import com.tomo.category.repository.CategoryRepository;
 import com.tomo.category.service.model.CategorySnapshot;
 import com.tomo.common.exception.BusinessException;
 import com.tomo.common.exception.CommonErrorCode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import org.slf4j.Logger;
@@ -29,6 +30,9 @@ public class CategoryCommandService {
    *
    * @param categoryRepository 카테고리 저장소
    */
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "Spring이 관리하는 JPA Repository를 공유 의존성으로 주입받는다.")
   public CategoryCommandService(CategoryRepository categoryRepository) {
     this.categoryRepository = categoryRepository;
   }
@@ -110,6 +114,38 @@ public class CategoryCommandService {
   }
 
   /**
+   * 사용자 소유의 공부 카테고리를 삭제한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param categoryId 삭제할 카테고리 ID
+   * @throws BusinessException 카테고리 ID가 유효하지 않거나, 카테고리가 존재하지 않거나, 삭제 권한이 없거나, 동시 삭제 충돌이 발생한 경우
+   */
+  @Transactional
+  public void deleteCategory(String userId, Long categoryId) {
+    validateDeleteCategoryId(categoryId);
+
+    CategorySnapshot snapshot =
+        categoryRepository
+            .findSnapshotById(categoryId)
+            .orElseThrow(
+                () -> {
+                  LOG.debug("카테고리 삭제 거부. 존재하지 않는 카테고리");
+                  return new BusinessException(CategoryErrorCode.CATEGORY_NOT_FOUND);
+                });
+
+    if (!userId.equals(snapshot.userId())) {
+      LOG.debug("카테고리 삭제 거부. 소유자가 아님");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN);
+    }
+
+    long deletedCount = categoryRepository.deleteByIdAndUserId(categoryId, userId);
+    if (deletedCount != 1L) {
+      LOG.debug("카테고리 삭제 동시 요청 충돌 발생");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_DELETE_CONFLICT);
+    }
+  }
+
+  /**
    * 카테고리 생성 시 이름이 유효성 검증 조건을 충족하는지 확인한다.
    *
    * <p>null 또는 공백이거나, 앞뒤 공백이 포함되어 있거나, 최대 길이를 초과하면 거부한다.
@@ -135,6 +171,19 @@ public class CategoryCommandService {
     if (categoryId == null || categoryId <= 0 || !isValidCategoryName(categoryName)) {
       LOG.debug("카테고리 수정 요청 유효성 검증 실패");
       throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+    }
+  }
+
+  /**
+   * 카테고리 삭제 요청의 ID가 유효성 검증 조건을 충족하는지 확인한다.
+   *
+   * @param categoryId 검증할 카테고리 ID
+   * @throws BusinessException 카테고리 ID가 유효하지 않은 경우
+   */
+  public static void validateDeleteCategoryId(Long categoryId) {
+    if (categoryId == null || categoryId <= 0) {
+      LOG.debug("카테고리 삭제 ID 유효성 검증 실패");
+      throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_ID);
     }
   }
 

@@ -66,4 +66,13 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
       @Param("previousCategoryName") String previousCategoryName,
       @Param("categoryName") String categoryName,
       @Param("updatedAt") LocalDateTime updatedAt);
+
+  /**
+   * 카테고리 ID와 소유자 ID가 모두 일치하는 카테고리를 삭제한다.
+   *
+   * @param id 카테고리 ID
+   * @param userId 카테고리 소유 사용자 ID
+   * @return 삭제한 카테고리 수
+   */
+  long deleteByIdAndUserId(Long id, String userId);
 }

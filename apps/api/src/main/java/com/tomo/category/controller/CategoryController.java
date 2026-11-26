@@ -10,10 +10,15 @@ import com.tomo.category.service.CategoryFacade;
 import com.tomo.common.exception.BusinessException;
 import com.tomo.common.exception.CommonErrorCode;
 import com.tomo.common.response.CommonResponse;
+import com.tomo.common.response.ErrorResponse;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /** 공부 카테고리 기능을 처리한다. */
 @RestController
@@ -35,6 +41,9 @@ public class CategoryController implements CategoryApiDocs {
    *
    * @param categoryFacade 카테고리 업무 조정 객체
    */
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "Spring이 관리하는 Facade 빈을 공유 의존성으로 주입받는다.")
   public CategoryController(CategoryFacade categoryFacade) {
     this.categoryFacade = categoryFacade;
   }
@@ -113,5 +122,50 @@ public class CategoryController implements CategoryApiDocs {
     LOG.debug("카테고리 수정 완료");
 
     return CommonResponse.successWithoutData(request.getRequestId());
+  }
+
+  /**
+   * 현재 인증된 사용자의 공부 카테고리를 삭제한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param categoryId 삭제할 카테고리 ID
+   * @param request HTTP 요청
+   * @return 데이터가 없는 성공 응답
+   * @throws BusinessException 카테고리 ID가 유효하지 않거나 삭제할 수 없는 경우
+   */
+  @Override
+  @DeleteMapping("/{categoryId}")
+  public CommonResponse<Void> deleteCategory(
+      @AuthenticationPrincipal String userId,
+      @PathVariable("categoryId") Long categoryId,
+      HttpServletRequest request) {
+    CategoryCommandService.validateDeleteCategoryId(categoryId);
+
+    categoryFacade.deleteCategory(userId, categoryId);
+
+    LOG.debug("카테고리 삭제 완료");
+
+    return CommonResponse.successWithoutData(request.getRequestId());
+  }
+
+  /**
+   * 카테고리 삭제 요청에서 categoryId 경로 변수 타입 변환 실패 시 INVALID_CATEGORY_ID 오류 응답을 반환한다.
+   *
+   * @param exception 경로 변수 타입 불일치 예외
+   * @param request HTTP 요청
+   * @return 오류 응답
+   */
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<ErrorResponse> handleCategoryIdTypeMismatch(
+      MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+    if ("DELETE".equalsIgnoreCase(request.getMethod())
+        && "categoryId".equals(exception.getName())) {
+      LOG.debug("카테고리 삭제 ID 경로 변수 타입 불일치");
+      return ResponseEntity.status(CategoryErrorCode.INVALID_CATEGORY_ID.httpStatus())
+          .body(ErrorResponse.from(CategoryErrorCode.INVALID_CATEGORY_ID, request.getRequestId()));
+    }
+    LOG.debug("카테고리 요청 경로 변수 타입 불일치");
+    return ResponseEntity.status(CommonErrorCode.INVALID_REQUEST.httpStatus())
+        .body(ErrorResponse.from(CommonErrorCode.INVALID_REQUEST, request.getRequestId()));
   }
 }

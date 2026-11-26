@@ -4,6 +4,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -438,6 +439,126 @@ class CategoryControllerTest {
     result
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error.code").value("CATEGORY_UPDATE_CONFLICT"));
+  }
+
+  @Test
+  @DisplayName("유효한 JWT와 카테고리 ID로 삭제 요청하면 200과 data 없는 성공 응답을 반환한다")
+  void deletesCategory() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.success").value(true))
+        .andExpect(jsonPath("$.data").doesNotExist())
+        .andExpect(jsonPath("$.meta.requestId").exists())
+        .andExpect(jsonPath("$.meta.timestamp").isNotEmpty());
+
+    verify(categoryFacade).deleteCategory(USER_ID, 1L);
+  }
+
+  @Test
+  @DisplayName("카테고리 삭제 시 ID가 0 이하이면 400 INVALID_CATEGORY_ID를 반환한다")
+  void rejectsNonPositiveCategoryIdWhenDeleting() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/0").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_ID"));
+
+    verifyNoInteractions(categoryFacade);
+  }
+
+  @Test
+  @DisplayName("카테고리 삭제 시 ID가 숫자가 아니면 400 INVALID_CATEGORY_ID를 반환한다")
+  void rejectsNonNumericCategoryIdWhenDeleting() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/전공").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_ID"));
+
+    verifyNoInteractions(categoryFacade);
+  }
+
+  @Test
+  @DisplayName("다른 사용자의 카테고리를 삭제하면 403 CATEGORY_DELETE_FORBIDDEN을 반환한다")
+  void returnsCategoryDeleteForbidden() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN))
+        .when(categoryFacade)
+        .deleteCategory(USER_ID, 1L);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.error.code").value("CATEGORY_DELETE_FORBIDDEN"));
+  }
+
+  @Test
+  @DisplayName("존재하지 않는 카테고리를 삭제하면 404 CATEGORY_NOT_FOUND를 반환한다")
+  void returnsCategoryNotFoundWhenDeleting() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CategoryErrorCode.CATEGORY_NOT_FOUND))
+        .when(categoryFacade)
+        .deleteCategory(USER_ID, 1L);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.error.code").value("CATEGORY_NOT_FOUND"));
+  }
+
+  @Test
+  @DisplayName("동시 삭제 충돌이 발생하면 409 CATEGORY_DELETE_CONFLICT를 반환한다")
+  void returnsCategoryDeleteConflict() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CategoryErrorCode.CATEGORY_DELETE_CONFLICT))
+        .when(categoryFacade)
+        .deleteCategory(USER_ID, 1L);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(delete(PATH + "/1").header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+
+    // then
+    result
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("CATEGORY_DELETE_CONFLICT"));
   }
 
   private String accessToken() {

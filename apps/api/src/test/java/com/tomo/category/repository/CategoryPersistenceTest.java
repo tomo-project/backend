@@ -124,4 +124,27 @@ class CategoryPersistenceTest {
     assertThat(updatedCount).isEqualTo(1);
     assertThat(afterUpdate).contains(new CategorySnapshot(categoryId, owner.getId(), "교양"));
   }
+
+  @Test
+  @DisplayName("소유자 ID가 일치하는 경우에만 카테고리를 삭제하고 삭제된 건수를 반환한다")
+  void deletesCategoryByIdAndUserId() {
+    // given
+    User owner = userRepository.saveAndFlush(User.createPending());
+    User otherUser = userRepository.saveAndFlush(User.createPending());
+    Category saved = categoryRepository.saveAndFlush(new Category(owner.getId(), "전공"));
+    Long categoryId = saved.getId();
+    entityManager.clear();
+
+    // when
+    long mismatchedDeleteCount =
+        categoryRepository.deleteByIdAndUserId(categoryId, otherUser.getId());
+    long matchedDeleteCount = categoryRepository.deleteByIdAndUserId(categoryId, owner.getId());
+    entityManager.flush();
+    entityManager.clear();
+
+    // then
+    assertThat(mismatchedDeleteCount).isZero();
+    assertThat(matchedDeleteCount).isEqualTo(1L);
+    assertThat(categoryRepository.findSnapshotById(categoryId)).isEmpty();
+  }
 }

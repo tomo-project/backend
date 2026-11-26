@@ -340,4 +340,93 @@ class CategoryCommandServiceTest {
                 assertThat(exception.getErrorCode())
                     .isEqualTo(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT));
   }
+
+  @Test
+  @DisplayName("본인 소유 카테고리를 삭제하면 저장소 DELETE를 수행한다")
+  void deletesCategory() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(1L);
+
+    // when
+    service.deleteCategory(USER_ID, CATEGORY_ID);
+
+    // then
+    verify(categoryRepository).deleteByIdAndUserId(CATEGORY_ID, USER_ID);
+  }
+
+  @Test
+  @DisplayName("카테고리 삭제 시 ID가 0 이하이면 INVALID_CATEGORY_ID를 던진다")
+  void rejectsInvalidCategoryIdWhenDeleting() {
+    // when
+    Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, 0L));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.INVALID_CATEGORY_ID));
+
+    verifyNoInteractions(categoryRepository);
+  }
+
+  @Test
+  @DisplayName("삭제할 카테고리가 존재하지 않으면 CATEGORY_NOT_FOUND를 던진다")
+  void rejectsMissingCategoryWhenDeleting() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID)).thenReturn(Optional.empty());
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, CATEGORY_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("다른 사용자의 카테고리를 삭제하려고 하면 CATEGORY_DELETE_FORBIDDEN을 던진다")
+  void rejectsDeletingOtherUsersCategory() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, "other-user", "전공")));
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, CATEGORY_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN));
+  }
+
+  @Test
+  @DisplayName("동시 삭제로 삭제된 행이 0건이면 CATEGORY_DELETE_CONFLICT를 던진다")
+  void rejectsConcurrentDeleteWhenZeroRowsDeleted() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(0L);
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, CATEGORY_ID));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_DELETE_CONFLICT));
+  }
 }
