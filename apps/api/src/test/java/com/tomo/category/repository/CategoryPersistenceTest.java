@@ -136,15 +136,13 @@ class CategoryPersistenceTest {
     entityManager.clear();
 
     // when
-    long mismatchedDeleteCount =
+    int mismatchedDeleteCount =
         categoryRepository.deleteByIdAndUserId(categoryId, otherUser.getId());
-    long matchedDeleteCount = categoryRepository.deleteByIdAndUserId(categoryId, owner.getId());
-    entityManager.flush();
-    entityManager.clear();
+    int matchedDeleteCount = categoryRepository.deleteByIdAndUserId(categoryId, owner.getId());
 
     // then
     assertThat(mismatchedDeleteCount).isZero();
-    assertThat(matchedDeleteCount).isEqualTo(1L);
+    assertThat(matchedDeleteCount).isEqualTo(1);
     assertThat(categoryRepository.findSnapshotById(categoryId)).isEmpty();
   }
 }

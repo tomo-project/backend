@@ -138,8 +138,8 @@ public class CategoryCommandService {
       throw new BusinessException(CategoryErrorCode.CATEGORY_DELETE_FORBIDDEN);
     }
 
-    long deletedCount = categoryRepository.deleteByIdAndUserId(categoryId, userId);
-    if (deletedCount != 1L) {
+    int deletedCount = categoryRepository.deleteByIdAndUserId(categoryId, userId);
+    if (deletedCount != 1) {
       LOG.debug("카테고리 삭제 동시 요청 충돌 발생");
       throw new BusinessException(CategoryErrorCode.CATEGORY_DELETE_CONFLICT);
     }

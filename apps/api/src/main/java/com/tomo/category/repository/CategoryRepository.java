@@ -68,11 +68,13 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
       @Param("updatedAt") LocalDateTime updatedAt);
 
   /**
-   * 카테고리 ID와 소유자 ID가 모두 일치하는 카테고리를 삭제한다.
+   * 카테고리 ID와 소유자 ID가 모두 일치하는 카테고리를 조건부 일괄 삭제한다.
    *
-   * @param id 카테고리 ID
+   * @param categoryId 카테고리 ID
    * @param userId 카테고리 소유 사용자 ID
-   * @return 삭제한 카테고리 수
+   * @return 삭제된 DB 행 수
    */
-  long deleteByIdAndUserId(Long id, String userId);
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query("delete from Category c where c.id = :categoryId and c.userId = :userId")
+  int deleteByIdAndUserId(@Param("categoryId") Long categoryId, @Param("userId") String userId);
 }

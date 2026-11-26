@@ -347,7 +347,7 @@ class CategoryCommandServiceTest {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
         .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
-    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(1L);
+    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(1);
 
     // when
     service.deleteCategory(USER_ID, CATEGORY_ID);
@@ -416,7 +416,7 @@ class CategoryCommandServiceTest {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
         .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
-    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(0L);
+    when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(0);
 
     // when
     Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, CATEGORY_ID));
