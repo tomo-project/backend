@@ -8,10 +8,12 @@ import static org.mockito.Mockito.when;
 
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.command.CreateCategoryCommand;
+import com.tomo.category.service.command.UpdateCategoryCommand;
 import com.tomo.category.service.model.CategoryItemResult;
 import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.exception.AuthErrorCode;
 import com.tomo.common.exception.BusinessException;
+import com.tomo.common.exception.CommonErrorCode;
 import com.tomo.user.service.UserCategoryQueryService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CategoryFacadeTest {
   private static final String USER_ID = "user-id";
+  private static final Long CATEGORY_ID = 1L;
 
   @Mock private UserCategoryQueryService userCategoryQueryService;
   @Mock private CategoryCommandService categoryCommandService;
@@ -220,5 +223,78 @@ class CategoryFacadeTest {
                 assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.INVALID_ACCESS_TOKEN));
 
     verifyNoInteractions(userCategoryQueryService, categoryQueryService);
+  }
+
+  @Test
+  @DisplayName("활성 사용자이고 유효한 수정 요청이면 카테고리 수정 서비스를 호출한다")
+  void updatesCategoryForActiveUser() {
+    // given
+    UpdateCategoryCommand command = new UpdateCategoryCommand(USER_ID, CATEGORY_ID, "교양");
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(true);
+
+    // when
+    facade.updateCategory(command);
+
+    // then
+    verify(categoryCommandService).updateCategory(USER_ID, CATEGORY_ID, "교양");
+  }
+
+  @Test
+  @DisplayName("활성 상태가 아닌 사용자의 카테고리 수정은 CATEGORY_UPDATE_FORBIDDEN으로 거부한다")
+  void rejectsUpdateCategoryForInactiveUser() {
+    // given
+    UpdateCategoryCommand command = new UpdateCategoryCommand(USER_ID, CATEGORY_ID, "교양");
+    when(userCategoryQueryService.isActiveCategoryUser(USER_ID)).thenReturn(false);
+
+    // when
+    Throwable thrown = catchThrowable(() -> facade.updateCategory(command));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_UPDATE_FORBIDDEN));
+
+    verifyNoInteractions(categoryCommandService);
+  }
+
+  @Test
+  @DisplayName("카테고리 수정 시 사용자 ID가 공백이면 INVALID_ACCESS_TOKEN으로 거부한다")
+  void rejectsUpdateCategoryForBlankUserId() {
+    // given
+    UpdateCategoryCommand command = new UpdateCategoryCommand("   ", CATEGORY_ID, "교양");
+
+    // when
+    Throwable thrown = catchThrowable(() -> facade.updateCategory(command));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(AuthErrorCode.INVALID_ACCESS_TOKEN));
+
+    verifyNoInteractions(userCategoryQueryService, categoryCommandService);
+  }
+
+  @Test
+  @DisplayName("카테고리 수정 시 이름이 유효하지 않으면 사용자 조회 전에 INVALID_REQUEST로 거부한다")
+  void rejectsUpdateCategoryWithInvalidNameBeforeUserCheck() {
+    // given
+    UpdateCategoryCommand command = new UpdateCategoryCommand(USER_ID, CATEGORY_ID, " 교양 ");
+
+    // when
+    Throwable thrown = catchThrowable(() -> facade.updateCategory(command));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_REQUEST));
+
+    verifyNoInteractions(userCategoryQueryService, categoryCommandService);
   }
 }

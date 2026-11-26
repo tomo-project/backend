@@ -2,6 +2,7 @@ package com.tomo.category.service;
 
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.command.CreateCategoryCommand;
+import com.tomo.category.service.command.UpdateCategoryCommand;
 import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.exception.AuthErrorCode;
 import com.tomo.common.exception.BusinessException;
@@ -79,5 +80,30 @@ public class CategoryFacade {
     }
 
     return categoryQueryService.getCategories(userId);
+  }
+
+  /**
+   * 인증된 사용자의 공부 카테고리를 수정한다.
+   *
+   * @param command 카테고리 수정 입력 값
+   * @throws BusinessException 인증 정보가 없거나, 입력값이 유효하지 않거나, 수정 권한이 없거나, 대상이 존재하지 않거나, 중복·동시 수정 충돌이 발생한
+   *     경우
+   */
+  @Transactional
+  public void updateCategory(UpdateCategoryCommand command) {
+    if (command == null || command.userId() == null || command.userId().isBlank()) {
+      LOG.debug("카테고리 수정 거부. 인증 사용자 ID 없음");
+      throw new BusinessException(AuthErrorCode.INVALID_ACCESS_TOKEN);
+    }
+
+    CategoryCommandService.validateUpdateRequest(command.categoryId(), command.categoryName());
+
+    if (!userCategoryQueryService.isActiveCategoryUser(command.userId())) {
+      LOG.debug("카테고리 수정 거부. 활성 계정이 아님");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_UPDATE_FORBIDDEN);
+    }
+
+    categoryCommandService.updateCategory(
+        command.userId(), command.categoryId(), command.categoryName());
   }
 }

@@ -3,6 +3,7 @@ package com.tomo.category.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -10,7 +11,11 @@ import static org.mockito.Mockito.when;
 import com.tomo.category.entity.Category;
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.repository.CategoryRepository;
+import com.tomo.category.service.model.CategorySnapshot;
 import com.tomo.common.exception.BusinessException;
+import com.tomo.common.exception.CommonErrorCode;
+import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +28,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 @ExtendWith(MockitoExtension.class)
 class CategoryCommandServiceTest {
   private static final String USER_ID = "user-id";
+  private static final Long CATEGORY_ID = 1L;
 
   @Mock private CategoryRepository categoryRepository;
 
@@ -159,5 +165,179 @@ class CategoryCommandServiceTest {
             exception ->
                 assertThat(exception.getErrorCode())
                     .isEqualTo(CategoryErrorCode.CONCURRENT_REQUEST_CONFLICT));
+  }
+
+  @Test
+  @DisplayName("본인 소유 카테고리를 중복되지 않은 이름으로 수정하면 저장소 UPDATE를 수행한다")
+  void updatesCategory() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
+    when(categoryRepository.updateCategoryName(
+            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+        .thenReturn(1);
+
+    // when
+    service.updateCategory(USER_ID, CATEGORY_ID, "교양");
+
+    // then
+    verify(categoryRepository)
+        .updateCategoryName(
+            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class));
+  }
+
+  @Test
+  @DisplayName("카테고리 수정 시 ID가 0 이하이면 INVALID_REQUEST를 던진다")
+  void rejectsInvalidCategoryIdWhenUpdating() {
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, 0L, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_REQUEST));
+
+    verifyNoInteractions(categoryRepository);
+  }
+
+  @Test
+  @DisplayName("카테고리 수정 시 이름이 유효하지 않으면 INVALID_REQUEST를 던진다")
+  void rejectsInvalidCategoryNameWhenUpdating() {
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, " 교양 "));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_REQUEST));
+
+    verifyNoInteractions(categoryRepository);
+  }
+
+  @Test
+  @DisplayName("수정할 카테고리가 존재하지 않으면 CATEGORY_NOT_FOUND를 던진다")
+  void rejectsMissingCategoryWhenUpdating() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID)).thenReturn(Optional.empty());
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_NOT_FOUND));
+  }
+
+  @Test
+  @DisplayName("다른 사용자의 카테고리를 수정하려고 하면 CATEGORY_UPDATE_FORBIDDEN을 던진다")
+  void rejectsUpdatingOtherUsersCategory() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, "other-user", "전공")));
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_UPDATE_FORBIDDEN));
+  }
+
+  @Test
+  @DisplayName("기존과 동일한 이름으로 카테고리를 수정하려고 하면 CATEGORY_ALREADY_EXISTS를 던진다")
+  void rejectsUpdatingToSameCategoryName() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "전공"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_ALREADY_EXISTS));
+  }
+
+  @Test
+  @DisplayName("이미 존재하는 다른 카테고리 이름으로 수정하려고 하면 CATEGORY_ALREADY_EXISTS를 던진다")
+  void rejectsUpdatingToExistingCategoryName() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(true);
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_ALREADY_EXISTS));
+  }
+
+  @Test
+  @DisplayName("동시 수정으로 갱신된 행이 0건이면 CATEGORY_UPDATE_CONFLICT를 던진다")
+  void rejectsConcurrentUpdateWhenZeroRowsUpdated() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
+    when(categoryRepository.updateCategoryName(
+            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+        .thenReturn(0);
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT));
+  }
+
+  @Test
+  @DisplayName("동시 수정으로 유니크 제약 충돌이 발생하면 CATEGORY_UPDATE_CONFLICT를 던진다")
+  void translatesUniqueViolationOnUpdateToCategoryUpdateConflict() {
+    // given
+    when(categoryRepository.findSnapshotById(CATEGORY_ID))
+        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+    when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
+    when(categoryRepository.updateCategoryName(
+            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+        .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
+
+    // when
+    Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
+
+    // then
+    assertThat(thrown)
+        .isInstanceOfSatisfying(
+            BusinessException.class,
+            exception ->
+                assertThat(exception.getErrorCode())
+                    .isEqualTo(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT));
   }
 }

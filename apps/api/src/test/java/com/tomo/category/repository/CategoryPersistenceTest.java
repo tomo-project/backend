@@ -5,10 +5,15 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.tomo.category.entity.Category;
 import com.tomo.category.service.model.CategoryItemResult;
+import com.tomo.category.service.model.CategorySnapshot;
 import com.tomo.user.entity.User;
 import com.tomo.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,5 +100,28 @@ class CategoryPersistenceTest {
         .containsExactly(
             new CategoryItemResult(first.getId(), "전공"),
             new CategoryItemResult(second.getId(), "교양"));
+  }
+
+  @Test
+  @DisplayName("카테고리 스냅샷을 조회하고 소유자와 직전 이름이 일치할 때만 이름을 갱신한다")
+  void findsSnapshotAndUpdatesCategoryName() {
+    // given
+    User owner = userRepository.saveAndFlush(User.createPending());
+    Category saved = categoryRepository.saveAndFlush(new Category(owner.getId(), "전공"));
+    Long categoryId = saved.getId();
+    LocalDateTime updatedAt =
+        LocalDateTime.now(ZoneOffset.UTC).plusMinutes(5).truncatedTo(ChronoUnit.MICROS);
+    entityManager.clear();
+
+    // when
+    Optional<CategorySnapshot> beforeUpdate = categoryRepository.findSnapshotById(categoryId);
+    int updatedCount =
+        categoryRepository.updateCategoryName(categoryId, owner.getId(), "전공", "교양", updatedAt);
+    Optional<CategorySnapshot> afterUpdate = categoryRepository.findSnapshotById(categoryId);
+
+    // then
+    assertThat(beforeUpdate).contains(new CategorySnapshot(categoryId, owner.getId(), "전공"));
+    assertThat(updatedCount).isEqualTo(1);
+    assertThat(afterUpdate).contains(new CategorySnapshot(categoryId, owner.getId(), "교양"));
   }
 }

@@ -2,17 +2,21 @@ package com.tomo.category.controller;
 
 import com.tomo.category.controller.docs.CategoryApiDocs;
 import com.tomo.category.dto.request.CategoryCreateRequest;
+import com.tomo.category.dto.request.CategoryUpdateRequest;
 import com.tomo.category.dto.response.CategoryListResponse;
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.service.CategoryCommandService;
 import com.tomo.category.service.CategoryFacade;
 import com.tomo.common.exception.BusinessException;
+import com.tomo.common.exception.CommonErrorCode;
 import com.tomo.common.response.CommonResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -79,5 +83,35 @@ public class CategoryController implements CategoryApiDocs {
     LOG.debug("카테고리 목록 조회 완료");
 
     return CommonResponse.success(response, request.getRequestId());
+  }
+
+  /**
+   * 현재 인증된 사용자의 공부 카테고리를 수정한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param categoryId 수정할 카테고리 ID
+   * @param requestBody 카테고리 수정 요청 본문
+   * @param request HTTP 요청
+   * @return 데이터가 없는 성공 응답
+   * @throws BusinessException 요청 값이 유효하지 않거나 수정할 수 없는 경우
+   */
+  @Override
+  @PatchMapping("/{categoryId}")
+  public CommonResponse<Void> updateCategory(
+      @AuthenticationPrincipal String userId,
+      @PathVariable("categoryId") Long categoryId,
+      @RequestBody(required = false) CategoryUpdateRequest requestBody,
+      HttpServletRequest request) {
+    if (requestBody == null) {
+      throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+    }
+
+    CategoryCommandService.validateUpdateRequest(categoryId, requestBody.categoryName());
+
+    categoryFacade.updateCategory(requestBody.toCommand(userId, categoryId));
+
+    LOG.debug("카테고리 수정 완료");
+
+    return CommonResponse.successWithoutData(request.getRequestId());
   }
 }

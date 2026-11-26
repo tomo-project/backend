@@ -3,7 +3,11 @@ package com.tomo.category.service;
 import com.tomo.category.entity.Category;
 import com.tomo.category.exception.CategoryErrorCode;
 import com.tomo.category.repository.CategoryRepository;
+import com.tomo.category.service.model.CategorySnapshot;
 import com.tomo.common.exception.BusinessException;
+import com.tomo.common.exception.CommonErrorCode;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -56,7 +60,57 @@ public class CategoryCommandService {
   }
 
   /**
-   * 카테고리 이름이 유효성 검증 조건을 충족하는지 확인한다.
+   * 사용자 소유의 공부 카테고리 이름을 수정한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @param categoryId 수정할 카테고리 ID
+   * @param categoryName 변경할 카테고리 이름
+   * @throws BusinessException 입력값이 유효하지 않거나, 카테고리가 존재하지 않거나, 수정 권한이 없거나, 이름이 중복되거나, 동시 수정 충돌이 발생한
+   *     경우
+   */
+  @Transactional
+  public void updateCategory(String userId, Long categoryId, String categoryName) {
+    validateUpdateRequest(categoryId, categoryName);
+
+    CategorySnapshot snapshot =
+        categoryRepository
+            .findSnapshotById(categoryId)
+            .orElseThrow(
+                () -> {
+                  LOG.debug("카테고리 수정 거부. 존재하지 않는 카테고리");
+                  return new BusinessException(CategoryErrorCode.CATEGORY_NOT_FOUND);
+                });
+
+    if (!userId.equals(snapshot.userId())) {
+      LOG.debug("카테고리 수정 거부. 소유자가 아님");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_UPDATE_FORBIDDEN);
+    }
+
+    if (categoryName.equals(snapshot.categoryName())
+        || categoryRepository.existsByUserIdAndCategoryName(userId, categoryName)) {
+      LOG.debug("카테고리 수정 거부. 동일한 이름의 카테고리 존재");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_ALREADY_EXISTS);
+    }
+
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    int updatedCount;
+    try {
+      updatedCount =
+          categoryRepository.updateCategoryName(
+              categoryId, userId, snapshot.categoryName(), categoryName, now);
+    } catch (DataIntegrityViolationException exception) {
+      LOG.debug("카테고리 수정 동시 요청 유니크 제약 충돌 발생");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT);
+    }
+
+    if (updatedCount != 1) {
+      LOG.debug("카테고리 수정 동시 요청 상태 충돌 발생");
+      throw new BusinessException(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT);
+    }
+  }
+
+  /**
+   * 카테고리 생성 시 이름이 유효성 검증 조건을 충족하는지 확인한다.
    *
    * <p>null 또는 공백이거나, 앞뒤 공백이 포함되어 있거나, 최대 길이를 초과하면 거부한다.
    *
@@ -64,12 +118,30 @@ public class CategoryCommandService {
    * @throws BusinessException 카테고리 이름이 유효하지 않은 경우
    */
   public static void validateCategoryName(String categoryName) {
-    if (categoryName == null
-        || categoryName.isBlank()
-        || !categoryName.equals(categoryName.strip())
-        || categoryName.length() > MAX_NAME_LENGTH) {
+    if (!isValidCategoryName(categoryName)) {
       LOG.debug("카테고리 이름 유효성 검증 실패");
       throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_NAME);
     }
+  }
+
+  /**
+   * 카테고리 수정 요청의 ID와 이름이 유효성 검증 조건을 충족하는지 확인한다.
+   *
+   * @param categoryId 검증할 카테고리 ID
+   * @param categoryName 검증할 카테고리 이름
+   * @throws BusinessException 카테고리 ID 또는 이름이 유효하지 않은 경우
+   */
+  public static void validateUpdateRequest(Long categoryId, String categoryName) {
+    if (categoryId == null || categoryId <= 0 || !isValidCategoryName(categoryName)) {
+      LOG.debug("카테고리 수정 요청 유효성 검증 실패");
+      throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
+    }
+  }
+
+  private static boolean isValidCategoryName(String categoryName) {
+    return categoryName != null
+        && !categoryName.isBlank()
+        && categoryName.equals(categoryName.strip())
+        && categoryName.length() <= MAX_NAME_LENGTH;
   }
 }
