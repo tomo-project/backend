@@ -103,26 +103,34 @@ class CategoryPersistenceTest {
   }
 
   @Test
-  @DisplayName("카테고리 스냅샷을 조회하고 소유자와 직전 이름이 일치할 때만 이름을 갱신한다")
+  @DisplayName("카테고리 스냅샷을 조회하고 소유자·직전 이름·직전 수정 시각이 일치할 때만 이름을 갱신한다")
   void findsSnapshotAndUpdatesCategoryName() {
     // given
     User owner = userRepository.saveAndFlush(User.createPending());
     Category saved = categoryRepository.saveAndFlush(new Category(owner.getId(), "전공"));
     Long categoryId = saved.getId();
-    LocalDateTime updatedAt =
+    LocalDateTime initialUpdatedAt = saved.getUpdatedAt();
+    LocalDateTime nextUpdatedAt =
         LocalDateTime.now(ZoneOffset.UTC).plusMinutes(5).truncatedTo(ChronoUnit.MICROS);
     entityManager.clear();
 
     // when
     Optional<CategorySnapshot> beforeUpdate = categoryRepository.findSnapshotById(categoryId);
+    int staleTimestampCount =
+        categoryRepository.updateCategoryName(
+            categoryId, owner.getId(), "전공", initialUpdatedAt.minusSeconds(1), "교양", nextUpdatedAt);
     int updatedCount =
-        categoryRepository.updateCategoryName(categoryId, owner.getId(), "전공", "교양", updatedAt);
+        categoryRepository.updateCategoryName(
+            categoryId, owner.getId(), "전공", initialUpdatedAt, "교양", nextUpdatedAt);
     Optional<CategorySnapshot> afterUpdate = categoryRepository.findSnapshotById(categoryId);
 
     // then
-    assertThat(beforeUpdate).contains(new CategorySnapshot(categoryId, owner.getId(), "전공"));
+    assertThat(beforeUpdate)
+        .contains(new CategorySnapshot(categoryId, owner.getId(), "전공", initialUpdatedAt));
+    assertThat(staleTimestampCount).isZero();
     assertThat(updatedCount).isEqualTo(1);
-    assertThat(afterUpdate).contains(new CategorySnapshot(categoryId, owner.getId(), "교양"));
+    assertThat(afterUpdate)
+        .contains(new CategorySnapshot(categoryId, owner.getId(), "교양", nextUpdatedAt));
   }
 
   @Test

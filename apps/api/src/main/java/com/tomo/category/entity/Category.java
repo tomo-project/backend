@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 /** category 테이블에 대응하는 공부 카테고리 엔티티. */
 @Entity
@@ -43,7 +44,7 @@ public class Category {
    * @param categoryName 카테고리 이름
    */
   public Category(String userId, String categoryName) {
-    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
     this.userId = userId;
     this.categoryName = categoryName;
     this.createdAt = now;
@@ -52,7 +53,7 @@ public class Category {
 
   @PreUpdate
   private void updateTimestamp() {
-    updatedAt = LocalDateTime.now(ZoneOffset.UTC);
+    updatedAt = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
   }
 
   public Long getId() {

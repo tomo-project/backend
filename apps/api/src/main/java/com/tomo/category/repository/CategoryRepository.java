@@ -35,35 +35,39 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
   List<CategoryItemResult> findAllItemsByUserIdOrderByIdAsc(@Param("userId") String userId);
 
   /**
-   * 카테고리 ID로 소유자 및 이름 확인용 스냅샷을 조회한다.
+   * 카테고리 ID로 소유자, 이름, 마지막 수정 시각 확인용 스냅샷을 조회한다.
    *
    * @param categoryId 카테고리 ID
    * @return 조회된 카테고리 스냅샷. 없으면 빈 Optional
    */
   @Query(
-      "select new com.tomo.category.service.model.CategorySnapshot(c.id, c.userId, c.categoryName) "
+      "select new com.tomo.category.service.model.CategorySnapshot("
+          + "c.id, c.userId, c.categoryName, c.updatedAt) "
           + "from Category c where c.id = :categoryId")
   Optional<CategorySnapshot> findSnapshotById(@Param("categoryId") Long categoryId);
 
   /**
-   * 소유자와 직전 이름이 일치하는 카테고리의 이름과 수정 시각을 갱신한다.
+   * 소유자, 직전 이름, 직전 수정 시각이 모두 일치하는 카테고리의 이름과 수정 시각을 갱신한다.
    *
    * @param categoryId 카테고리 ID
    * @param userId 카테고리 소유 사용자 ID
    * @param previousCategoryName 수정 전 카테고리 이름
+   * @param previousUpdatedAt 수정 전 카테고리 수정 시각(UTC)
    * @param categoryName 변경할 카테고리 이름
-   * @param updatedAt 수정 시각(UTC)
+   * @param updatedAt 새 수정 시각(UTC)
    * @return 갱신된 DB 행 수
    */
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update Category c set c.categoryName = :categoryName, c.updatedAt = :updatedAt "
           + "where c.id = :categoryId and c.userId = :userId "
-          + "and c.categoryName = :previousCategoryName")
+          + "and c.categoryName = :previousCategoryName "
+          + "and c.updatedAt = :previousUpdatedAt")
   int updateCategoryName(
       @Param("categoryId") Long categoryId,
       @Param("userId") String userId,
       @Param("previousCategoryName") String previousCategoryName,
+      @Param("previousUpdatedAt") LocalDateTime previousUpdatedAt,
       @Param("categoryName") String categoryName,
       @Param("updatedAt") LocalDateTime updatedAt);
 

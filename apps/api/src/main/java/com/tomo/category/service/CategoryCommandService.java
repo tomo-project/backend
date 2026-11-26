@@ -9,6 +9,7 @@ import com.tomo.common.exception.CommonErrorCode;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -96,12 +97,17 @@ public class CategoryCommandService {
       throw new BusinessException(CategoryErrorCode.CATEGORY_ALREADY_EXISTS);
     }
 
-    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    LocalDateTime nextUpdatedAt = nextUpdatedAt(snapshot.updatedAt());
     int updatedCount;
     try {
       updatedCount =
           categoryRepository.updateCategoryName(
-              categoryId, userId, snapshot.categoryName(), categoryName, now);
+              categoryId,
+              userId,
+              snapshot.categoryName(),
+              snapshot.updatedAt(),
+              categoryName,
+              nextUpdatedAt);
     } catch (DataIntegrityViolationException exception) {
       LOG.debug("카테고리 수정 동시 요청 유니크 제약 충돌 발생");
       throw new BusinessException(CategoryErrorCode.CATEGORY_UPDATE_CONFLICT);
@@ -185,6 +191,14 @@ public class CategoryCommandService {
       LOG.debug("카테고리 삭제 ID 유효성 검증 실패");
       throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_ID);
     }
+  }
+
+  private static LocalDateTime nextUpdatedAt(LocalDateTime previousUpdatedAt) {
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
+    if (previousUpdatedAt != null && !now.isAfter(previousUpdatedAt)) {
+      return previousUpdatedAt.plusNanos(1000L);
+    }
+    return now;
   }
 
   private static boolean isValidCategoryName(String categoryName) {

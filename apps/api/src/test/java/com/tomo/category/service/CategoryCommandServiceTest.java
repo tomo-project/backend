@@ -29,6 +29,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 class CategoryCommandServiceTest {
   private static final String USER_ID = "user-id";
   private static final Long CATEGORY_ID = 1L;
+  private static final LocalDateTime SNAPSHOT_UPDATED_AT = LocalDateTime.of(2026, 11, 26, 0, 0, 0);
 
   @Mock private CategoryRepository categoryRepository;
 
@@ -172,10 +173,16 @@ class CategoryCommandServiceTest {
   void updatesCategory() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
     when(categoryRepository.updateCategoryName(
-            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+            eq(CATEGORY_ID),
+            eq(USER_ID),
+            eq("전공"),
+            eq(SNAPSHOT_UPDATED_AT),
+            eq("교양"),
+            any(LocalDateTime.class)))
         .thenReturn(1);
 
     // when
@@ -184,7 +191,12 @@ class CategoryCommandServiceTest {
     // then
     verify(categoryRepository)
         .updateCategoryName(
-            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class));
+            eq(CATEGORY_ID),
+            eq(USER_ID),
+            eq("전공"),
+            eq(SNAPSHOT_UPDATED_AT),
+            eq("교양"),
+            any(LocalDateTime.class));
   }
 
   @Test
@@ -242,7 +254,9 @@ class CategoryCommandServiceTest {
   void rejectsUpdatingOtherUsersCategory() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, "other-user", "전공")));
+        .thenReturn(
+            Optional.of(
+                new CategorySnapshot(CATEGORY_ID, "other-user", "전공", SNAPSHOT_UPDATED_AT)));
 
     // when
     Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "교양"));
@@ -261,7 +275,8 @@ class CategoryCommandServiceTest {
   void rejectsUpdatingToSameCategoryName() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
 
     // when
     Throwable thrown = catchThrowable(() -> service.updateCategory(USER_ID, CATEGORY_ID, "전공"));
@@ -280,7 +295,8 @@ class CategoryCommandServiceTest {
   void rejectsUpdatingToExistingCategoryName() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(true);
 
     // when
@@ -300,10 +316,16 @@ class CategoryCommandServiceTest {
   void rejectsConcurrentUpdateWhenZeroRowsUpdated() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
     when(categoryRepository.updateCategoryName(
-            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+            eq(CATEGORY_ID),
+            eq(USER_ID),
+            eq("전공"),
+            eq(SNAPSHOT_UPDATED_AT),
+            eq("교양"),
+            any(LocalDateTime.class)))
         .thenReturn(0);
 
     // when
@@ -323,10 +345,16 @@ class CategoryCommandServiceTest {
   void translatesUniqueViolationOnUpdateToCategoryUpdateConflict() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, "교양")).thenReturn(false);
     when(categoryRepository.updateCategoryName(
-            eq(CATEGORY_ID), eq(USER_ID), eq("전공"), eq("교양"), any(LocalDateTime.class)))
+            eq(CATEGORY_ID),
+            eq(USER_ID),
+            eq("전공"),
+            eq(SNAPSHOT_UPDATED_AT),
+            eq("교양"),
+            any(LocalDateTime.class)))
         .thenThrow(new DataIntegrityViolationException("Duplicate entry"));
 
     // when
@@ -346,7 +374,8 @@ class CategoryCommandServiceTest {
   void deletesCategory() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(1);
 
     // when
@@ -396,7 +425,9 @@ class CategoryCommandServiceTest {
   void rejectsDeletingOtherUsersCategory() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, "other-user", "전공")));
+        .thenReturn(
+            Optional.of(
+                new CategorySnapshot(CATEGORY_ID, "other-user", "전공", SNAPSHOT_UPDATED_AT)));
 
     // when
     Throwable thrown = catchThrowable(() -> service.deleteCategory(USER_ID, CATEGORY_ID));
@@ -415,7 +446,8 @@ class CategoryCommandServiceTest {
   void rejectsConcurrentDeleteWhenZeroRowsDeleted() {
     // given
     when(categoryRepository.findSnapshotById(CATEGORY_ID))
-        .thenReturn(Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공")));
+        .thenReturn(
+            Optional.of(new CategorySnapshot(CATEGORY_ID, USER_ID, "전공", SNAPSHOT_UPDATED_AT)));
     when(categoryRepository.deleteByIdAndUserId(CATEGORY_ID, USER_ID)).thenReturn(0);
 
     // when
