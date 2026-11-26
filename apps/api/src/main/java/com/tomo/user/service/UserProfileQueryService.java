@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 사용자의 계정 및 프로필 정보를 조회한다. */
 @Service
-public class UserProfileQueryService {
+public class UserProfileQueryService implements UserCategoryQueryService {
   private static final Logger LOG = LoggerFactory.getLogger(UserProfileQueryService.class);
 
   private final UserRepository userRepository;
@@ -58,5 +58,25 @@ public class UserProfileQueryService {
     }
 
     return new UserProfileDetails(user.getNickname(), user.getProfileImage());
+  }
+
+  /**
+   * 카테고리 기능을 요청한 사용자가 활성 계정인지 확인한다.
+   *
+   * @param userId 인증된 사용자 ID
+   * @return 활성 상태의 계정이면 true
+   * @throws BusinessException 인증 사용자 ID가 없는 경우
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public boolean isActiveCategoryUser(String userId) {
+    if (userId == null || userId.isBlank()) {
+      throw new BusinessException(AuthErrorCode.INVALID_ACCESS_TOKEN);
+    }
+
+    return userRepository
+        .findById(userId)
+        .filter(user -> user.getAccountStatus() == AccountStatus.ACTIVE)
+        .isPresent();
   }
 }
