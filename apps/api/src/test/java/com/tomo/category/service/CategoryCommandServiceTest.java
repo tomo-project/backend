@@ -60,6 +60,23 @@ class CategoryCommandServiceTest {
   }
 
   @Test
+  @DisplayName("유니코드 보조 문자 기준으로 100자 이하인 카테고리 이름이면 저장소에 저장한다")
+  void createsCategoryWithSupplementaryCharactersWithinMaxCodePointLength() {
+    // given
+    String emojiName = "👑".repeat(100);
+    when(categoryRepository.existsByUserIdAndCategoryName(USER_ID, emojiName)).thenReturn(false);
+
+    // when
+    service.createCategory(USER_ID, emojiName);
+
+    // then
+    ArgumentCaptor<Category> captor = ArgumentCaptor.forClass(Category.class);
+    verify(categoryRepository).saveAndFlush(captor.capture());
+    Category saved = captor.getValue();
+    assertThat(saved.getCategoryName()).isEqualTo(emojiName);
+  }
+
+  @Test
   @DisplayName("카테고리 이름이 null이면 INVALID_CATEGORY_NAME을 던진다")
   void rejectsNullCategoryName() {
     // when

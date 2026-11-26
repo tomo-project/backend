@@ -205,6 +205,6 @@ public class CategoryCommandService {
     return categoryName != null
         && !categoryName.isBlank()
         && categoryName.equals(categoryName.strip())
-        && categoryName.length() <= MAX_NAME_LENGTH;
+        && categoryName.codePointCount(0, categoryName.length()) <= MAX_NAME_LENGTH;
   }
 }
