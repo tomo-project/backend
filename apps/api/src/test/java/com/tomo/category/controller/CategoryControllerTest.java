@@ -20,6 +20,7 @@ import com.tomo.category.service.model.CategoryListResult;
 import com.tomo.common.auth.config.SecurityConfig;
 import com.tomo.common.auth.token.AccessTokenProvider;
 import com.tomo.common.exception.BusinessException;
+import com.tomo.common.exception.CommonErrorCode;
 import com.tomo.user.service.LoginSessionService;
 import io.jsonwebtoken.Jwts;
 import java.time.Clock;
@@ -82,8 +83,8 @@ class CategoryControllerTest {
   }
 
   @Test
-  @DisplayName("카테고리 필드가 누락되면 400 INVALID_CATEGORY_NAME을 반환한다")
-  void rejectsMissingCategoryField() throws Exception {
+  @DisplayName("카테고리 생성 요청 본문이 없으면 400 INVALID_CATEGORY_NAME을 반환한다")
+  void rejectsMissingCreateRequestBody() throws Exception {
     // given
     String token = accessToken();
     when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
@@ -93,8 +94,7 @@ class CategoryControllerTest {
         mockMvc.perform(
             post(PATH)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"));
+                .contentType(MediaType.APPLICATION_JSON));
 
     // then
     result
@@ -106,11 +106,15 @@ class CategoryControllerTest {
   }
 
   @Test
-  @DisplayName("카테고리 이름이 공백이면 400 INVALID_CATEGORY_NAME을 반환한다")
-  void rejectsBlankCategoryName() throws Exception {
+  @DisplayName("카테고리 이름이 유효하지 않으면 400 INVALID_CATEGORY_NAME을 반환한다")
+  void rejectsInvalidCategoryName() throws Exception {
     // given
     String token = accessToken();
+    CreateCategoryCommand command = new CreateCategoryCommand(USER_ID, "   ");
     when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CategoryErrorCode.INVALID_CATEGORY_NAME))
+        .when(categoryFacade)
+        .createCategory(command);
 
     // when
     ResultActions result =
@@ -125,57 +129,6 @@ class CategoryControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.success").value(false))
         .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_NAME"));
-
-    verifyNoInteractions(categoryFacade);
-  }
-
-  @Test
-  @DisplayName("카테고리 이름에 앞뒤 공백이 있으면 400 INVALID_CATEGORY_NAME을 반환한다")
-  void rejectsCategoryNameWithSurroundingWhitespace() throws Exception {
-    // given
-    String token = accessToken();
-    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
-
-    // when
-    ResultActions result =
-        mockMvc.perform(
-            post(PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category_nm\":\" 전공 \"}"));
-
-    // then
-    result
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_NAME"));
-
-    verifyNoInteractions(categoryFacade);
-  }
-
-  @Test
-  @DisplayName("카테고리 이름이 100자를 초과하면 400 INVALID_CATEGORY_NAME을 반환한다")
-  void rejectsTooLongCategoryName() throws Exception {
-    // given
-    String token = accessToken();
-    String tooLongName = "가".repeat(101);
-    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
-
-    // when
-    ResultActions result =
-        mockMvc.perform(
-            post(PATH)
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"category_nm\":\"" + tooLongName + "\"}"));
-
-    // then
-    result
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.success").value(false))
-        .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_NAME"));
-
-    verifyNoInteractions(categoryFacade);
   }
 
   @Test
@@ -344,11 +297,37 @@ class CategoryControllerTest {
   }
 
   @Test
+  @DisplayName("카테고리 수정 요청 본문이 없으면 400 INVALID_REQUEST를 반환한다")
+  void rejectsMissingUpdateCategoryRequestBody() throws Exception {
+    // given
+    String token = accessToken();
+    when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+
+    // when
+    ResultActions result =
+        mockMvc.perform(
+            patch(PATH + "/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON));
+
+    // then
+    result
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+    verifyNoInteractions(categoryFacade);
+  }
+
+  @Test
   @DisplayName("카테고리 수정 요청 필드가 유효하지 않으면 400 INVALID_REQUEST를 반환한다")
   void rejectsInvalidUpdateCategoryRequest() throws Exception {
     // given
     String token = accessToken();
+    UpdateCategoryCommand command = new UpdateCategoryCommand(USER_ID, 1L, " 교양 ");
     when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CommonErrorCode.INVALID_REQUEST))
+        .when(categoryFacade)
+        .updateCategory(command);
 
     // when
     ResultActions result =
@@ -362,8 +341,6 @@ class CategoryControllerTest {
     result
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
-
-    verifyNoInteractions(categoryFacade);
   }
 
   @Test
@@ -469,6 +446,9 @@ class CategoryControllerTest {
     // given
     String token = accessToken();
     when(loginSessionService.isValidAccessSession(USER_ID, SESSION_ID)).thenReturn(true);
+    doThrow(new BusinessException(CategoryErrorCode.INVALID_CATEGORY_ID))
+        .when(categoryFacade)
+        .deleteCategory(USER_ID, 0L);
 
     // when
     ResultActions result =
@@ -478,8 +458,6 @@ class CategoryControllerTest {
     result
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("INVALID_CATEGORY_ID"));
-
-    verifyNoInteractions(categoryFacade);
   }
 
   @Test

@@ -5,7 +5,6 @@ import com.tomo.category.dto.request.CategoryCreateRequest;
 import com.tomo.category.dto.request.CategoryUpdateRequest;
 import com.tomo.category.dto.response.CategoryListResponse;
 import com.tomo.category.exception.CategoryErrorCode;
-import com.tomo.category.service.CategoryCommandService;
 import com.tomo.category.service.CategoryFacade;
 import com.tomo.common.exception.BusinessException;
 import com.tomo.common.exception.CommonErrorCode;
@@ -67,8 +66,6 @@ public class CategoryController implements CategoryApiDocs {
       throw new BusinessException(CategoryErrorCode.INVALID_CATEGORY_NAME);
     }
 
-    CategoryCommandService.validateCategoryName(requestBody.categoryName());
-
     categoryFacade.createCategory(requestBody.toCommand(userId));
 
     LOG.debug("카테고리 생성 완료");
@@ -115,8 +112,6 @@ public class CategoryController implements CategoryApiDocs {
       throw new BusinessException(CommonErrorCode.INVALID_REQUEST);
     }
 
-    CategoryCommandService.validateUpdateRequest(categoryId, requestBody.categoryName());
-
     categoryFacade.updateCategory(requestBody.toCommand(userId, categoryId));
 
     LOG.debug("카테고리 수정 완료");
@@ -139,8 +134,6 @@ public class CategoryController implements CategoryApiDocs {
       @AuthenticationPrincipal String userId,
       @PathVariable("categoryId") Long categoryId,
       HttpServletRequest request) {
-    CategoryCommandService.validateDeleteCategoryId(categoryId);
-
     categoryFacade.deleteCategory(userId, categoryId);
 
     LOG.debug("카테고리 삭제 완료");
