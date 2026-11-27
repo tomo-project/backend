@@ -58,10 +58,13 @@ springdoc:
     path: /v3/api-docs
 
 scalar:
+  page-title: TOMO API
   enabled: ${OPENAPI_ENABLED}
   url: /v3/api-docs
 
 tomo:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   auth:
     jwt-secret-base64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     access-token-expiration: 1h

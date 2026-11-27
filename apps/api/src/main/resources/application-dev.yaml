@@ -69,10 +69,13 @@ springdoc:
     path: /v3/api-docs
 
 scalar:
+  page-title: TOMO API
   enabled: ${OPENAPI_ENABLED}
   url: /v3/api-docs
 
 tomo:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:}
   auth:
     jwt-secret-base64: ${JWT_SECRET_BASE64}
     access-token-expiration: 1h
