@@ -52,6 +52,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -90,8 +91,14 @@ class SecurityConfigTest {
         .andExpect(status().isOk())
         .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, origin))
         .andExpect(
-            header()
-                .string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS, "authorization, content-type"))
+            response ->
+                assertThat(
+                        StringUtils.tokenizeToStringArray(
+                            response
+                                .getResponse()
+                                .getHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS),
+                            ","))
+                    .containsExactlyInAnyOrder("authorization", "content-type"))
         .andExpect(header().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
   }
 
