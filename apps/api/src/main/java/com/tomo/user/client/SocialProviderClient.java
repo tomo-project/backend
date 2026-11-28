@@ -2,7 +2,7 @@ package com.tomo.user.client;
 
 import com.tomo.user.entity.SocialProvider;
 
-/** 소셜 인증 제공자별 사용자 식별 정보 조회 계약. */
+/** 소셜 인증 제공자별 인가 코드 검증 계약. */
 public interface SocialProviderClient {
 
   /**
@@ -13,10 +13,18 @@ public interface SocialProviderClient {
   SocialProvider getProvider();
 
   /**
-   * 제공자의 Access Token으로 사용자 식별값을 조회한다.
+   * 인가 코드를 제공자 토큰으로 교환하고 사용자 식별값을 조회한다.
    *
-   * @param providerAccessToken 소셜 제공자가 발급한 Access Token
-   * @return 제공자별 사용자 고유 식별값
+   * @param authorizationCode 제공자 인가 코드
+   * @param codeVerifier Google PKCE 검증값. Kakao에서는 null
+   * @return 검증된 제공자 사용자 식별 정보
    */
-  String getProviderSubject(String providerAccessToken);
+  Identity authenticateAuthorizationCode(String authorizationCode, String codeVerifier);
+
+  /**
+   * 검증된 소셜 사용자 식별 정보.
+   *
+   * @param providerSubject 제공자 고유 사용자 ID
+   */
+  record Identity(String providerSubject) {}
 }
